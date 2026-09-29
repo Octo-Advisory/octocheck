@@ -5,12 +5,6 @@
   "bin": {
     "octocheck-install": "./bin/install.js"
   },
-  "files": [
-    "bin",
-    ".claude",
-    "rules",
-    "README.md"
-  ],
   "license": "MIT",
   "repository": {
     "type": "git",
