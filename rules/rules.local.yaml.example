@@ -1,0 +1,19 @@
+# Copy this to rules.local.yaml in your project root (not inside this plugin folder).
+#
+# Two things go here:
+#
+# 1. Team-added rules — factor 8+ only. Anything reusing a reserved factor 1-7 ID
+#    for its stack is discarded by /octocheck-init.
+#
+#    - { id: PY-8-01, stack: python, factor: 8, factor_name: "Team addition", description: "All API responses must use the shared envelope() helper", severity: medium, engine: llm }
+#
+# 2. Disabling a core rule that doesn't fit this project — e.g. if inline styles
+#    are your deliberate convention and FE-6-01 just adds noise. Reference the
+#    existing core rule ID with disabled: true; no other fields needed. Disabling
+#    is per-project (this file), never edits rules.core.yaml itself, and shows up
+#    in the report header as "N core rules disabled for this project" so it's
+#    visible, not silent.
+#
+#    - { id: FE-6-01, disabled: true }
+
+[]

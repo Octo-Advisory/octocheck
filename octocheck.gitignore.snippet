@@ -1,0 +1,11 @@
+# Recommended additions to your project's own .gitignore after installing OctoCheck.
+# These are working files regenerated on every run — not useful to commit, and
+# progress.json in particular can churn on every single task, creating merge noise.
+
+octocheck/cache/
+octocheck/progress.json
+
+# octocheck/plan.md and octocheck/reports/ are usually worth committing — plan.md
+# documents what a review covered, and reports/ is the actual review history over
+# time. Remove the two lines above if you'd rather keep everything, e.g. to inspect
+# cache/progress state in CI logs.

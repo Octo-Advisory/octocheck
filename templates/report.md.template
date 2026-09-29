@@ -1,0 +1,36 @@
+# OctoCheck Report — {date}
+
+Ruleset version: {version from rules.core.yaml's version comment}
+Tasks completed: {n} / {total}
+Files reviewed: {file_count} ({skipped_count} skipped as unchanged)
+Total flags: {flag_count}
+
+## Factor 1 — Comments
+### {file_path}
+| Line | Rule ID | Severity | Note |
+| --- | --- | --- | --- |
+| 42 | PY-1-01 | Medium | Public function `get_user` has no docstring |
+
+## Factor 2 — Casing
+...
+
+## Factor 3 — Dynamic paths
+...
+
+## Factor 4 — Test cases
+...
+
+## Factor 5 — Edge cases
+...
+
+## Factor 6 — Org standards
+...
+
+## Factor 7 — Optimize
+...
+
+<!--
+  One ## section per factor number actually flagged, in order.
+  Skip a factor heading entirely if it produced no flags — don't print empty sections.
+  Under each factor: one ### per file with at least one flag, table sorted by line number.
+-->

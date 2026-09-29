@@ -1,0 +1,22 @@
+{
+  "name": "octocheck",
+  "version": "0.1.0",
+  "description": "A read-only, LLM-based code review framework for Claude Code — Python, Java, Frontend, and Frappe.",
+  "bin": {
+    "octocheck-install": "./bin/install.js"
+  },
+  "files": [
+    "bin",
+    ".claude",
+    "rules",
+    "README.md"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Octo-Advisory/octocheck.git"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}

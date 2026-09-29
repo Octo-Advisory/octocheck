@@ -1,0 +1,155 @@
+# OctoCheck core rules — mandatory for every install.
+# version: 1.0.0
+# Bump this whenever a rule is added, removed, or its severity changes — the report
+# header records the version that produced it, so a report is traceable to the exact
+# rule set that generated it.
+# Reserved ID ranges (do not reuse in rules.local.yaml): factor numbers 1-7 per stack.
+# Team-added rules go in rules.local.yaml starting at factor 8.
+# engine is always "llm" by design — no static tooling is used in this build.
+
+# ============================== PYTHON ==============================
+- { id: PY-1-01, stack: python, factor: 1, factor_name: Comments, description: "Public function/class missing a docstring entirely", severity: medium, engine: llm }
+- { id: PY-1-02, stack: python, factor: 1, factor_name: Comments, description: "Docstring present but doesn't match current params/behaviour", severity: medium, engine: llm }
+- { id: PY-1-03, stack: python, factor: 1, factor_name: Comments, description: "Commented-out code block left in file", severity: low, engine: llm }
+- { id: PY-1-04, stack: python, factor: 1, factor_name: Comments, description: "Non-obvious logic (regex, bit ops, complex conditionals) has no explanatory comment", severity: medium, engine: llm }
+- { id: PY-1-05, stack: python, factor: 1, factor_name: Comments, description: "TODO/FIXME left with no ticket reference", severity: low, engine: llm }
+
+- { id: PY-2-01, stack: python, factor: 2, factor_name: Casing, description: "Variables/functions not snake_case", severity: medium, engine: llm }
+- { id: PY-2-02, stack: python, factor: 2, factor_name: Casing, description: "Classes not PascalCase", severity: medium, engine: llm }
+- { id: PY-2-03, stack: python, factor: 2, factor_name: Casing, description: "Constants not UPPER_SNAKE_CASE", severity: low, engine: llm }
+- { id: PY-2-04, stack: python, factor: 2, factor_name: Casing, description: "Module/file names not snake_case", severity: low, engine: llm }
+- { id: PY-2-05, stack: python, factor: 2, factor_name: Casing, description: "Same concept named differently across files (e.g. get_user vs fetch_user)", severity: medium, engine: llm }
+
+- { id: PY-3-01, stack: python, factor: 3, factor_name: "Dynamic paths", description: "Hardcoded absolute filesystem path", severity: high, engine: llm }
+- { id: PY-3-02, stack: python, factor: 3, factor_name: "Dynamic paths", description: "Hardcoded hostname/IP/URL for an environment-specific server", severity: high, engine: llm }
+- { id: PY-3-03, stack: python, factor: 3, factor_name: "Dynamic paths", description: "Hardcoded credentials, API keys or secrets in source", severity: high, engine: llm }
+- { id: PY-3-04, stack: python, factor: 3, factor_name: "Dynamic paths", description: "Config value inlined instead of read from environment/settings", severity: medium, engine: llm }
+
+- { id: PY-4-01, stack: python, factor: 4, factor_name: "Test cases", description: "New/changed function has no corresponding test", severity: high, engine: llm }
+- { id: PY-4-02, stack: python, factor: 4, factor_name: "Test cases", description: "Existing tests don't cover exception/error paths", severity: medium, engine: llm }
+- { id: PY-4-03, stack: python, factor: 4, factor_name: "Test cases", description: "Tests assert only the happy path, no boundary values", severity: medium, engine: llm }
+- { id: PY-4-04, stack: python, factor: 4, factor_name: "Test cases", description: "Coverage on changed lines below the agreed threshold", severity: high, engine: llm }
+- { id: PY-4-05, stack: python, factor: 4, factor_name: "Test cases", description: "Over-mocking hides a real integration issue", severity: low, engine: llm }
+
+- { id: PY-5-01, stack: python, factor: 5, factor_name: "Edge cases", description: "None/null not checked before attribute access", severity: high, engine: llm }
+- { id: PY-5-02, stack: python, factor: 5, factor_name: "Edge cases", description: "Empty list/dict/string not handled before iteration or indexing", severity: medium, engine: llm }
+- { id: PY-5-03, stack: python, factor: 5, factor_name: "Edge cases", description: "Timezone-naive datetime used where timezone-aware is expected", severity: medium, engine: llm }
+- { id: PY-5-04, stack: python, factor: 5, factor_name: "Edge cases", description: "Race condition or missing lock in threaded/async code", severity: high, engine: llm }
+- { id: PY-5-05, stack: python, factor: 5, factor_name: "Edge cases", description: "External call (API, DB, file I/O) has no try/except or timeout", severity: high, engine: llm }
+- { id: PY-5-06, stack: python, factor: 5, factor_name: "Edge cases", description: "Bare except: clause swallowing all errors", severity: medium, engine: llm }
+
+- { id: PY-6-01, stack: python, factor: 6, factor_name: "Org standards", description: "Import ordering / unused imports", severity: low, engine: llm }
+- { id: PY-6-02, stack: python, factor: 6, factor_name: "Org standards", description: "print() used instead of the standard logger", severity: medium, engine: llm }
+- { id: PY-6-03, stack: python, factor: 6, factor_name: "Org standards", description: "DB migration not reversible (no down migration)", severity: high, engine: llm }
+- { id: PY-6-04, stack: python, factor: 6, factor_name: "Org standards", description: "Dependency added without a pinned version", severity: medium, engine: llm }
+- { id: PY-6-05, stack: python, factor: 6, factor_name: "Org standards", description: "New module doesn't follow the project's folder/package structure", severity: medium, engine: llm }
+
+- { id: PY-7-01, stack: python, factor: 7, factor_name: Optimize, description: "Same DB query executed inside a loop (N+1)", severity: high, engine: llm }
+- { id: PY-7-02, stack: python, factor: 7, factor_name: Optimize, description: "Dead code — unreachable statement or unused function", severity: medium, engine: llm }
+- { id: PY-7-03, stack: python, factor: 7, factor_name: Optimize, description: "Redundant computation that could be cached/memoized", severity: low, engine: llm }
+- { id: PY-7-04, stack: python, factor: 7, factor_name: Optimize, description: "Comprehension/generator misuse causing unnecessary memory use on large data", severity: low, engine: llm }
+
+# ================================ JAVA ================================
+- { id: JV-1-01, stack: java, factor: 1, factor_name: Comments, description: "Public method/class missing Javadoc", severity: medium, engine: llm }
+- { id: JV-1-02, stack: java, factor: 1, factor_name: Comments, description: "Javadoc present but stale relative to the current signature", severity: medium, engine: llm }
+- { id: JV-1-03, stack: java, factor: 1, factor_name: Comments, description: "Commented-out code block left in file", severity: low, engine: llm }
+- { id: JV-1-04, stack: java, factor: 1, factor_name: Comments, description: "Complex algorithm/business rule has no explanatory comment", severity: medium, engine: llm }
+
+- { id: JV-2-01, stack: java, factor: 2, factor_name: Casing, description: "Classes/interfaces not PascalCase", severity: medium, engine: llm }
+- { id: JV-2-02, stack: java, factor: 2, factor_name: Casing, description: "Methods/variables not camelCase", severity: medium, engine: llm }
+- { id: JV-2-03, stack: java, factor: 2, factor_name: Casing, description: "static final constants not UPPER_SNAKE_CASE", severity: low, engine: llm }
+- { id: JV-2-04, stack: java, factor: 2, factor_name: Casing, description: "Package names not lowercase", severity: low, engine: llm }
+
+- { id: JV-3-01, stack: java, factor: 3, factor_name: "Dynamic paths", description: "Hardcoded absolute path or drive letter", severity: high, engine: llm }
+- { id: JV-3-02, stack: java, factor: 3, factor_name: "Dynamic paths", description: "Hardcoded hostname/port/URL", severity: high, engine: llm }
+- { id: JV-3-03, stack: java, factor: 3, factor_name: "Dynamic paths", description: "Hardcoded credentials, API keys or secrets in source", severity: high, engine: llm }
+- { id: JV-3-04, stack: java, factor: 3, factor_name: "Dynamic paths", description: "Environment-specific value not read from application.properties/yml or env vars", severity: medium, engine: llm }
+
+- { id: JV-4-01, stack: java, factor: 4, factor_name: "Test cases", description: "New/changed public method has no JUnit test", severity: high, engine: llm }
+- { id: JV-4-02, stack: java, factor: 4, factor_name: "Test cases", description: "Checked/unchecked exception paths untested", severity: medium, engine: llm }
+- { id: JV-4-03, stack: java, factor: 4, factor_name: "Test cases", description: "Coverage on changed lines below the agreed threshold (JaCoCo)", severity: high, engine: llm }
+- { id: JV-4-04, stack: java, factor: 4, factor_name: "Test cases", description: "Tests only assert non-null, no boundary values", severity: medium, engine: llm }
+
+- { id: JV-5-01, stack: java, factor: 5, factor_name: "Edge cases", description: "Unchecked getter chain risks a NullPointerException", severity: high, engine: llm }
+- { id: JV-5-02, stack: java, factor: 5, factor_name: "Edge cases", description: "Empty collection/array not handled before iteration", severity: medium, engine: llm }
+- { id: JV-5-03, stack: java, factor: 5, factor_name: "Edge cases", description: "Numeric overflow risk — int used where long is needed", severity: medium, engine: llm }
+- { id: JV-5-04, stack: java, factor: 5, factor_name: "Edge cases", description: "Shared mutable state without synchronization", severity: high, engine: llm }
+- { id: JV-5-05, stack: java, factor: 5, factor_name: "Edge cases", description: "Empty catch block swallowing an exception", severity: medium, engine: llm }
+- { id: JV-5-06, stack: java, factor: 5, factor_name: "Edge cases", description: "Resource (stream, connection) not closed / no try-with-resources", severity: high, engine: llm }
+
+- { id: JV-6-01, stack: java, factor: 6, factor_name: "Org standards", description: "Wildcard import (import x.*)", severity: low, engine: llm }
+- { id: JV-6-02, stack: java, factor: 6, factor_name: "Org standards", description: "System.out.println used instead of SLF4J/Log4j", severity: medium, engine: llm }
+- { id: JV-6-03, stack: java, factor: 6, factor_name: "Org standards", description: "Flyway/Liquibase migration not reversible", severity: high, engine: llm }
+- { id: JV-6-04, stack: java, factor: 6, factor_name: "Org standards", description: "Dependency version not pinned in pom.xml/build.gradle", severity: medium, engine: llm }
+- { id: JV-6-05, stack: java, factor: 6, factor_name: "Org standards", description: "New class doesn't follow the layered architecture (controller/service/repository)", severity: medium, engine: llm }
+
+- { id: JV-7-01, stack: java, factor: 7, factor_name: Optimize, description: "Query/DB call inside a loop (N+1)", severity: high, engine: llm }
+- { id: JV-7-02, stack: java, factor: 7, factor_name: Optimize, description: "Dead code — unreachable statement or unused private method", severity: medium, engine: llm }
+- { id: JV-7-03, stack: java, factor: 7, factor_name: Optimize, description: "Redundant object creation in a hot path", severity: low, engine: llm }
+- { id: JV-7-04, stack: java, factor: 7, factor_name: Optimize, description: "Inefficient collection choice (e.g. List.contains in a loop instead of a Set)", severity: medium, engine: llm }
+
+# ============================= FRONTEND =============================
+- { id: FE-1-01, stack: frontend, factor: 1, factor_name: Comments, description: "Complex JS function or non-obvious DOM logic has no explanatory comment", severity: medium, engine: llm }
+- { id: FE-1-02, stack: frontend, factor: 1, factor_name: Comments, description: "Commented-out HTML/CSS/JS block left in file", severity: low, engine: llm }
+- { id: FE-1-03, stack: frontend, factor: 1, factor_name: Comments, description: "TODO/FIXME left with no ticket reference", severity: low, engine: llm }
+
+- { id: FE-2-01, stack: frontend, factor: 2, factor_name: Casing, description: "JS variables/functions not camelCase", severity: medium, engine: llm }
+- { id: FE-2-02, stack: frontend, factor: 2, factor_name: Casing, description: "CSS classes not kebab-case (or the agreed BEM convention)", severity: medium, engine: llm }
+- { id: FE-2-03, stack: frontend, factor: 2, factor_name: Casing, description: "Component files not matching the agreed naming convention (e.g. PascalCase)", severity: low, engine: llm }
+- { id: FE-2-04, stack: frontend, factor: 2, factor_name: Casing, description: "HTML ids/data-attributes not kebab-case", severity: low, engine: llm }
+
+- { id: FE-3-01, stack: frontend, factor: 3, factor_name: "Dynamic paths", description: "Hardcoded absolute asset/API host instead of a relative or env-based URL", severity: high, engine: llm }
+- { id: FE-3-02, stack: frontend, factor: 3, factor_name: "Dynamic paths", description: "Hardcoded API key/token in client-side JS (exposed to the browser)", severity: high, engine: llm }
+- { id: FE-3-03, stack: frontend, factor: 3, factor_name: "Dynamic paths", description: "Environment-specific base URL not read from build-time config", severity: medium, engine: llm }
+
+- { id: FE-4-01, stack: frontend, factor: 4, factor_name: "Test cases", description: "New component/function has no corresponding unit test", severity: high, engine: llm }
+- { id: FE-4-02, stack: frontend, factor: 4, factor_name: "Test cases", description: "No test for the error/loading states of async UI", severity: medium, engine: llm }
+- { id: FE-4-03, stack: frontend, factor: 4, factor_name: "Test cases", description: "No test for form-validation edge cases", severity: medium, engine: llm }
+- { id: FE-4-04, stack: frontend, factor: 4, factor_name: "Test cases", description: "Coverage on changed lines below the agreed threshold", severity: high, engine: llm }
+
+- { id: FE-5-01, stack: frontend, factor: 5, factor_name: "Edge cases", description: "Empty/null API response not handled before rendering", severity: high, engine: llm }
+- { id: FE-5-02, stack: frontend, factor: 5, factor_name: "Edge cases", description: "No loading/error state while async data fetches", severity: medium, engine: llm }
+- { id: FE-5-03, stack: frontend, factor: 5, factor_name: "Edge cases", description: "Form doesn't handle invalid/empty input before submit", severity: medium, engine: llm }
+- { id: FE-5-04, stack: frontend, factor: 5, factor_name: "Edge cases", description: "Layout breaks on small viewport — missing media queries", severity: medium, engine: llm }
+- { id: FE-5-05, stack: frontend, factor: 5, factor_name: "Edge cases", description: "Accessibility gap — missing alt text, aria-labels, or keyboard navigation", severity: medium, engine: llm }
+- { id: FE-5-06, stack: frontend, factor: 5, factor_name: "Edge cases", description: "Unhandled promise rejection", severity: medium, engine: llm }
+
+- { id: FE-6-01, stack: frontend, factor: 6, factor_name: "Org standards", description: "Inline styles used instead of the shared stylesheet/design tokens", severity: low, engine: llm }
+- { id: FE-6-02, stack: frontend, factor: 6, factor_name: "Org standards", description: "console.log left in production code", severity: low, engine: llm }
+- { id: FE-6-03, stack: frontend, factor: 6, factor_name: "Org standards", description: "Component doesn't follow the project's folder/component structure", severity: medium, engine: llm }
+- { id: FE-6-04, stack: frontend, factor: 6, factor_name: "Org standards", description: "Dependency added without a pinned version in package.json", severity: medium, engine: llm }
+
+- { id: FE-7-01, stack: frontend, factor: 7, factor_name: Optimize, description: "Unnecessary re-renders — missing memoization or a bad key prop in a list", severity: medium, engine: llm }
+- { id: FE-7-02, stack: frontend, factor: 7, factor_name: Optimize, description: "Unused CSS selectors, unused JS imports, or dead code", severity: low, engine: llm }
+- { id: FE-7-03, stack: frontend, factor: 7, factor_name: Optimize, description: "Large images/assets not lazy-loaded or optimized", severity: low, engine: llm }
+- { id: FE-7-04, stack: frontend, factor: 7, factor_name: Optimize, description: "Redundant DOM queries — querySelector re-run instead of cached", severity: low, engine: llm }
+
+# ================================ FRAPPE ================================
+# Frappe apps mix Python + client-side JS, so PY- and FE- rules above still apply.
+# These are specific to Frappe's own conventions: DocTypes, hooks, ORM, permissions.
+- { id: FR-1-01, stack: frappe, factor: 1, factor_name: Comments, description: "Controller hook (validate, on_submit, before_cancel, etc.) has no comment explaining the business rule that triggers it", severity: medium, engine: llm }
+
+- { id: FR-2-01, stack: frappe, factor: 2, factor_name: Casing, description: "DocType field names not snake_case", severity: medium, engine: llm }
+- { id: FR-2-02, stack: frappe, factor: 2, factor_name: Casing, description: "DocType/module names not matching the framework's Title Case convention", severity: low, engine: llm }
+
+- { id: FR-3-01, stack: frappe, factor: 3, factor_name: "Dynamic paths", description: "Hardcoded site name or site-specific path (e.g. sites/mysite.local)", severity: high, engine: llm }
+- { id: FR-3-02, stack: frappe, factor: 3, factor_name: "Dynamic paths", description: "Hardcoded credentials in hooks.py or a committed site-config-like file", severity: high, engine: llm }
+- { id: FR-3-03, stack: frappe, factor: 3, factor_name: "Dynamic paths", description: "Environment value not read via frappe.conf / frappe.get_site_config()", severity: medium, engine: llm }
+
+- { id: FR-4-01, stack: frappe, factor: 4, factor_name: "Test cases", description: "New controller method has no test in the DocType's test_*.py", severity: high, engine: llm }
+- { id: FR-4-02, stack: frappe, factor: 4, factor_name: "Test cases", description: "Permission logic (has_permission, get_permission_query_conditions) untested across roles", severity: high, engine: llm }
+- { id: FR-4-03, stack: frappe, factor: 4, factor_name: "Test cases", description: "Client-script validation logic has no frontend test", severity: medium, engine: llm }
+
+- { id: FR-5-01, stack: frappe, factor: 5, factor_name: "Edge cases", description: "validate()/before_save() doesn't guard against a missing linked document", severity: high, engine: llm }
+- { id: FR-5-02, stack: frappe, factor: 5, factor_name: "Edge cases", description: "Bulk operation (frappe.db.sql, bulk update) doesn't handle partial failure or rollback", severity: high, engine: llm }
+- { id: FR-5-03, stack: frappe, factor: 5, factor_name: "Edge cases", description: "@frappe.whitelist method missing a role check or unreviewed allow_guest", severity: high, engine: llm }
+- { id: FR-5-04, stack: frappe, factor: 5, factor_name: "Edge cases", description: "Naming-series/auto-name collision not handled under concurrent document creation", severity: medium, engine: llm }
+
+- { id: FR-6-01, stack: frappe, factor: 6, factor_name: "Org standards", description: "Raw frappe.db.sql used where frappe.get_all/get_doc would suffice, bypassing the permission layer", severity: medium, engine: llm }
+- { id: FR-6-02, stack: frappe, factor: 6, factor_name: "Org standards", description: "DocType JSON change needing data migration has no matching patch in patches.txt", severity: high, engine: llm }
+- { id: FR-6-03, stack: frappe, factor: 6, factor_name: "Org standards", description: "New DocType/module doesn't follow the app's existing folder convention (doctype/, api/, public/js)", severity: medium, engine: llm }
+- { id: FR-6-04, stack: frappe, factor: 6, factor_name: "Org standards", description: "hooks.py entries (doc_events, scheduler_events) added without matching team documentation", severity: low, engine: llm }
+
+- { id: FR-7-01, stack: frappe, factor: 7, factor_name: Optimize, description: "frappe.get_doc called inside a loop instead of a single frappe.get_all with the needed fields", severity: high, engine: llm }
+- { id: FR-7-02, stack: frappe, factor: 7, factor_name: Optimize, description: "Report/query selects all fields (SELECT *) or filters on an unindexed field", severity: medium, engine: llm }
+- { id: FR-7-03, stack: frappe, factor: 7, factor_name: Optimize, description: "Unused client-script event binding (dead frm.trigger)", severity: low, engine: llm }
