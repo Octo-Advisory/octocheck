@@ -1,6 +1,6 @@
 ---
 description: Initialize OctoCheck review for this repo — builds/refreshes CLAUDE.md and drafts a review plan for approval
-allowed-tools: Read, Grep, Glob, Bash(git diff:*), Bash(git log:*), Bash(git status:*)
+allowed-tools: Read, Grep, Glob, Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(date:*)
 ---
 
 You are initializing OctoCheck, a read-only code review framework. You must never use an
@@ -14,9 +14,13 @@ Follow these steps in order. Do not skip ahead, and stop exactly where told.
 ## Step 1 — Set up the working folder
 If `octocheck/` does not exist at the repo root, create it with:
 - `octocheck/plan.md`
-- `octocheck/progress.json` (start as `{"tasks": [], "current": null, "approved": false}`)
+- `octocheck/progress.json` (start as `{"tasks": [], "current": null, "approved": false, "run_report_file": null}`)
 - `octocheck/cache/file-hashes.json` (start as `{}`)
 - `octocheck/reports/` (empty folder)
+
+If `octocheck/` already exists from a previous run, this is a fresh run — generate a new
+timestamped filename now (see Step 4) rather than reusing an old one, so this run's flags
+never mix into a previous run's report file.
 
 ## Step 2 — Handle CLAUDE.md
 Check the repo root for `CLAUDE.md`.
@@ -62,6 +66,7 @@ Write `octocheck/plan.md` in this exact structure:
 # OctoCheck Review Plan — <date>
 
 Ruleset: rules.core.yaml v<version> (<N> core rules disabled for this project: <ids, or "none">)
+Report will be written to: octocheck/reports/report-<YYYY-MM-DD-HHMMSS>.md
 
 ## Task 1: <folder/module name>
 - Files: <count> (<path>, <path>, ...)
@@ -71,6 +76,14 @@ Ruleset: rules.core.yaml v<version> (<N> core rules disabled for this project: <
 ## Task 2: <folder/module name>
 ...
 ```
+
+Generate `<YYYY-MM-DD-HHMMSS>` once, right now, from the current date and time (use `date
++%Y-%m-%d-%H%M%S` via Bash if unsure of the exact current time) — this is the one moment a
+timestamp gets picked for the whole run. Store it as `"run_report_file":
+"octocheck/reports/report-<that-timestamp>.md"` in `progress.json`. Every task in this run
+writes to that exact filename, decided now and never recomputed later — this is what
+guarantees two runs started at different times never collide into the same file, even if
+both happen on the same calendar day.
 
 Also write the same task list into `octocheck/progress.json` under `tasks`, each with
 `{"id": 1, "name": "...", "files": [...], "status": "pending"}`.
