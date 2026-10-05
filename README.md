@@ -1,4 +1,10 @@
-# OctoCheck
+<h1 align="center">
+  <a href="https://octo-advisory.github.io/octocheck/">OctoCheck</a>
+</h1>
+
+<p align="center">
+  <a href="https://octo-advisory.github.io/octocheck/">Step-by-step guide: install, run, add rules, track progress</a>
+</p>
 
 A read-only, LLM-based code review framework for [Claude Code](https://claude.com/claude-code).
 Reviews Python, Java, frontend (HTML/CSS/JS), and Frappe code against a fixed, versioned rule

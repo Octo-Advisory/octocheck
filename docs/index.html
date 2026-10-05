@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>OctoCheck guide</title>
+<meta name="description" content="Step-by-step guide to OctoCheck: install, run, add your own rules and track progress.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --hot: #30AFFF; --pink: #92EEFF; --blush: #C4F7CA; --lemon: #D8FFC5; --ink: #07263D;
+  --bg: #D8FFC5; --surface: #FFFFFF; --surface-2: #C4F7CA; --text: #07263D;
+  --soft: rgba(7,38,61,.76); --line: rgba(7,38,61,.17); --code-bg: #E4F6FF;
+  --gh-bg: #ffffff; --gh-text: #1f2328; --gh-soft: #59636e; --gh-line: #d1d9e0; --gh-link: #0969da; --gh-code: #eff1f3; --gh-tab: #f6f8fa;
+  --font: "Bricolage Grotesque", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #06202F; --surface: #0B3350; --surface-2: #0F4468; --text: #D8FFC5;
+    --soft: rgba(216,255,197,.8); --line: rgba(216,255,197,.18); --code-bg: #041722;
+    --gh-bg: #0d1117; --gh-text: #e6edf3; --gh-soft: #9198a1; --gh-line: #3d444d; --gh-link: #4493f5; --gh-code: #262c36; --gh-tab: #151b23;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #06202F; --surface: #0B3350; --surface-2: #0F4468; --text: #D8FFC5;
+  --soft: rgba(216,255,197,.8); --line: rgba(216,255,197,.18); --code-bg: #041722;
+  --gh-bg: #0d1117; --gh-text: #e6edf3; --gh-soft: #9198a1; --gh-line: #3d444d; --gh-link: #4493f5; --gh-code: #262c36; --gh-tab: #151b23;
+}
+*, *::before, *::after { box-sizing: inherit; }
+html { scroll-padding-top: calc(env(safe-area-inset-top, 0px) + 120px); scroll-behavior: smooth; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 17px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+[hidden] { display: none !important; }
+code { font-family: var(--mono); font-size: .86em; background: var(--code-bg); padding: .08em .36em; border-radius: 6px; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--hot); outline-offset: 2px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding: 0 20px; }
+pre.code { margin: 0; background: var(--code-bg); border-radius: 14px; padding: 14px 16px; overflow-x: auto; font-family: var(--mono); font-size: .8rem; line-height: 1.6; white-space: pre; }
+.btn { border: 1.5px solid var(--text); background: transparent; border-radius: 999px; padding: 8px 18px; font-weight: 600; cursor: pointer; }
+.btn.primary { background: var(--hot); border-color: var(--hot); color: var(--ink); }
+.btn.small { padding: 5px 13px; font-size: .86rem; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ---------- demo bar ---------- */
+.demo-bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: #07263D; color: #D8FFC5; }
+.demo-bar .wrap { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding-top: 10px; padding-bottom: 10px; }
+.demo-bar p { margin: 0; font-size: .92rem; max-width: 60ch; }
+.seg { display: inline-flex; border: 1.5px solid #D8FFC5; border-radius: 999px; overflow: hidden; }
+.seg button { background: transparent; border: 0; color: #D8FFC5; padding: 6px 16px; font-weight: 600; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: #30AFFF; color: #07263D; }
+.demo-bar :focus-visible { outline-color: #D8FFC5; }
+
+/* ---------- README preview ---------- */
+.preview { padding: 30px 0 60px; }
+.preview h1.pt { font-size: clamp(1.6rem, 3.4vw, 2.3rem); letter-spacing: -.025em; line-height: 1.1; margin: 0 0 8px; max-width: 24ch; }
+.preview .lead { margin: 0 0 20px; color: var(--soft); max-width: 62ch; }
+.toolbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.seg.dark { border-color: var(--text); }
+.seg.dark button { color: var(--text); }
+.seg.dark button[aria-pressed="true"] { background: var(--hot); color: var(--ink); }
+.hintpill { font-size: .92rem; color: var(--soft); }
+.gh { background: var(--gh-bg); color: var(--gh-text); border: 1px solid var(--gh-line); border-radius: 10px; overflow: hidden; font-family: -apple-system, "Segoe UI", system-ui, sans-serif; position: relative; }
+.gh-tabs { display: flex; gap: 6px; padding: 0 14px; background: var(--gh-tab); border-bottom: 1px solid var(--gh-line); }
+.gh-tabs span { padding: 12px 12px 10px; font-size: .88rem; color: var(--gh-soft); border-bottom: 2px solid transparent; }
+.gh-tabs span.on { color: var(--gh-text); font-weight: 600; border-bottom-color: #f78166; }
+.gh-body { padding: 26px 34px 0; max-height: 420px; overflow: hidden; position: relative; font-size: 16px; line-height: 1.5; }
+.gh-body::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 90px; background: linear-gradient(to bottom, transparent, var(--gh-bg)); pointer-events: none; }
+.gh-body h1 { font-size: 2em; font-weight: 600; margin: 0 0 16px; padding-bottom: .3em; border-bottom: 1px solid var(--gh-line); line-height: 1.25; }
+.gh-body h1.c, .gh-body p.c { text-align: center; }
+.gh-body h2 { font-size: 1.5em; font-weight: 600; margin: 24px 0 16px; padding-bottom: .3em; border-bottom: 1px solid var(--gh-line); }
+.gh-body p { margin: 0 0 16px; }
+.gh-body a { color: var(--gh-link); text-decoration: none; cursor: pointer; }
+.gh-body a:hover { text-decoration: underline; }
+.gh-body h1 a { color: var(--gh-link); }
+.gh-body code { background: var(--gh-code); }
+.pointer { position: absolute; z-index: 3; left: 50%; top: 86px; transform: translateX(calc(-50% + 205px)); background: var(--hot); color: var(--ink); font-weight: 600; font-size: .86rem; padding: 5px 12px; border-radius: 999px; font-family: var(--font); pointer-events: none; white-space: nowrap; }
+@media (max-width: 640px) { .pointer { left: auto; right: 12px; transform: none; top: 108px; } .gh-body { padding: 20px 18px 0; } }
+.change { margin-top: 28px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 16px; }
+.card { min-width: 0; }
+@media (max-width: 760px) { .change { grid-template-columns: 1fr; } }
+.change h2 { font-size: 1.05rem; margin: 0 0 8px; letter-spacing: -.01em; }
+.change ul { margin: 14px 0 0; padding-left: 1.2em; color: var(--soft); }
+.change li { margin-bottom: 6px; }
+
+/* ---------- Guide ---------- */
+.hero { text-align: center; padding: 54px 0 22px; }
+.hero h1 { font-size: clamp(2.6rem, 8vw, 5rem); letter-spacing: -.04em; line-height: 1; margin: 0 0 14px; font-weight: 800; }
+.hero p { margin: 0 auto; max-width: 54ch; color: var(--soft); font-size: 1.1rem; }
+.ribbon { list-style: none; display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; padding: 0; margin: 26px 0 0; counter-reset: r; }
+.ribbon li { counter-increment: r; }
+.ribbon a { display: inline-flex; align-items: center; gap: 9px; text-decoration: none; background: var(--surface); border: 1.5px solid var(--line); border-radius: 999px; padding: 8px 18px 8px 10px; font-weight: 600; color: var(--text); }
+.ribbon a::before { content: counter(r); width: 24px; height: 24px; border-radius: 50%; background: var(--hot); color: var(--ink); display: inline-flex; align-items: center; justify-content: center; font-size: .85rem; }
+.ribbon a:hover { border-color: var(--hot); }
+.subnav { position: sticky; top: calc(env(safe-area-inset-top, 0px) + var(--bar-h, 0px)); z-index: 10; background: var(--bg); border-bottom: 1.5px solid var(--line); margin-top: 26px; }
+.subnav .wrap { display: flex; gap: 6px; overflow-x: auto; padding-top: 8px; padding-bottom: 8px; }
+.subnav a { white-space: nowrap; text-decoration: none; color: var(--text); font-weight: 600; font-size: .94rem; padding: 6px 14px; border-radius: 999px; }
+.subnav a:hover, .subnav a.on { background: var(--hot); color: var(--ink); }
+section.sec { padding: 52px 0 6px; }
+section.sec h2 { font-size: clamp(1.6rem, 3.2vw, 2.3rem); letter-spacing: -.03em; line-height: 1.1; margin: 0 0 10px; }
+section.sec > .wrap > p.intro { margin: 0 0 22px; color: var(--soft); max-width: 66ch; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+@media (max-width: 820px) { .cols { grid-template-columns: 1fr; } }
+.card { background: var(--surface); border: 1.5px solid var(--line); border-radius: 20px; padding: 20px 22px; }
+.card h3 { margin: 0 0 8px; font-size: 1.2rem; letter-spacing: -.015em; }
+.card p { margin: 0 0 10px; } .card p:last-child { margin-bottom: 0; }
+.card ul { margin: 0 0 10px; padding-left: 1.2em; } .card li { margin-bottom: 5px; }
+.card .lbl { font-size: .9rem; font-weight: 600; color: var(--soft); margin: 12px 0 6px; }
+.copyrow { position: relative; }
+.copyrow .btn { position: absolute; top: 8px; right: 8px; background: var(--surface); }
+.copyrow pre.code { padding-right: 84px; }
+.note { border-left: 4px solid var(--hot); background: var(--surface-2); border-radius: 0 14px 14px 0; padding: 12px 16px; margin: 14px 0 0; }
+.note p { margin: 0; }
+
+/* walkthrough */
+.walk { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 22px; align-items: start; }
+@media (max-width: 960px) { .walk { grid-template-columns: 1fr; } }
+.steps { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 4px; }
+.steps button { width: 100%; text-align: left; display: flex; align-items: center; gap: 12px; background: transparent; border: 1.5px solid transparent; border-radius: 14px; padding: 8px 10px; cursor: pointer; font-weight: 600; }
+.steps button .n { width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--text); display: inline-flex; align-items: center; justify-content: center; font-size: .86rem; flex: none; }
+.steps button:hover { border-color: var(--line); }
+.steps button[aria-current="step"] { background: var(--surface); border-color: var(--hot); }
+.steps button[aria-current="step"] .n { background: var(--hot); border-color: var(--hot); color: var(--ink); }
+.steps button.past .n { background: var(--blush); border-color: var(--text); }
+@media (max-width: 960px) { .steps { grid-auto-flow: column; grid-auto-columns: max-content; overflow-x: auto; } .steps button .t { display: none; } .steps button { padding: 6px; } }
+.detail { background: var(--surface); border: 1.5px solid var(--line); border-radius: 20px; padding: 18px 20px; }
+.detail .cnt { margin: 0 0 2px; font-size: .9rem; color: var(--soft); font-weight: 600; }
+.detail h3 { margin: 0 0 8px; font-size: 1.35rem; letter-spacing: -.02em; line-height: 1.15; }
+.detail p { margin: 0 0 10px; }
+.detail .you { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; margin: 0 0 12px; font-size: .95rem; }
+.detail .you b { display: block; margin-bottom: 2px; }
+.detail .ctl { display: flex; gap: 10px; }
+.walk-right { min-width: 0; }
+@media (min-width: 961px) { .walk-right { position: sticky; top: calc(env(safe-area-inset-top, 0px) + var(--bar-h, 0px) + 64px); } }
+
+/* mock VS Code */
+.vs { --vb: #1e1e1e; --vside: #252526; --vbar: #2d2d2d; --vtext: #cccccc; --vdim: #8b8b8b; --vline: #3c3c3c;
+  background: var(--vb); color: var(--vtext); border-radius: 16px; overflow: hidden; border: 1.5px solid var(--line); font-family: var(--mono); font-size: 12.5px; line-height: 1.55; }
+.vs-title { background: var(--vbar); padding: 9px 14px; display: flex; justify-content: space-between; align-items: center; gap: 10px; color: var(--vdim); border-bottom: 1px solid var(--vline); flex-wrap: wrap; }
+.vs-title strong { color: var(--vtext); font-weight: 600; }
+.vs-prog { display: flex; align-items: center; gap: 8px; }
+.vs-bar { width: 120px; height: 6px; border-radius: 4px; background: #4a4a4a; overflow: hidden; }
+.vs-bar i { display: block; height: 100%; background: var(--hot); transition: width .4s; }
+.vs-main { display: grid; grid-template-columns: 200px minmax(0, 1fr); height: 300px; }
+@media (max-width: 640px) { .vs-main { grid-template-columns: 1fr; height: auto; } .vs-explorer { max-height: 150px; } .vs-editor { height: 260px; } }
+.vs-explorer { background: var(--vside); border-right: 1px solid var(--vline); overflow: auto; padding: 8px 0 8px; }
+.vs-explorer h4 { margin: 0 0 4px; padding: 0 12px; font-weight: 600; color: var(--vdim); font-size: 12px; }
+.tr { display: flex; align-items: center; gap: 6px; padding: 1px 10px; white-space: nowrap; }
+.tr .ch { width: 9px; color: var(--vdim); font-size: 9px; flex: none; }
+.tr.new { color: #fff; }
+.tr .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--hot); margin-left: auto; flex: none; }
+.vs-editor { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.vs-tabs { display: flex; background: var(--vside); overflow-x: auto; flex: none; }
+.vs-tabs button { background: var(--vside); border: 0; border-right: 1px solid var(--vline); color: var(--vdim); padding: 7px 14px; font-family: inherit; font-size: inherit; cursor: pointer; white-space: nowrap; }
+.vs-tabs button[aria-selected="true"] { background: var(--vb); color: #fff; box-shadow: inset 0 2px 0 var(--hot); }
+.vs-code { overflow: auto; padding: 8px 0; flex: 1; min-height: 0; }
+.vs-code .l { display: flex; white-space: pre; padding-right: 14px; }
+.vs-code .no { width: 38px; text-align: right; padding-right: 14px; color: #6b6b6b; flex: none; user-select: none; }
+.vs-code .l.hl { background: rgba(48,175,255,.26); }
+.vs-code .empty { padding: 18px; color: var(--vdim); }
+.vs-panel { border-top: 1px solid var(--vline); background: var(--vb); }
+.vs-ptabs { display: flex; gap: 4px; background: var(--vb); padding: 0 8px; border-bottom: 1px solid var(--vline); }
+.vs-ptabs span { padding: 6px 10px 5px; color: var(--vdim); border-bottom: 2px solid transparent; }
+.vs-ptabs span.on { color: #fff; border-bottom-color: var(--hot); }
+.vs-pbody { height: 300px; overflow: auto; padding: 10px 14px 12px; font-family: var(--font); font-size: 14px; line-height: 1.5; }
+.vs-pbody .term { font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; }
+.vs-pbody .term .p { color: #9ad59a; }
+.m { margin: 0 0 9px; max-width: 100%; }
+.m.u { background: #37373d; border-radius: 10px; padding: 7px 12px; font-family: var(--mono); font-size: 12.5px; color: #fff; }
+.m.u .pr { color: var(--pink); margin-right: 8px; }
+.m.tool { color: var(--vdim); font-family: var(--mono); font-size: 12px; }
+.m.tool i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #6b6b6b; margin-right: 8px; }
+.m.c { padding-left: 14px; border-left: 3px solid var(--hot); white-space: pre-line; }
+.m.c b { color: #fff; }
+.m { animation: pop .25s ease-out both; }
+@keyframes pop { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .m { animation: none; } html { scroll-behavior: auto; } * { transition: none !important; } }
+
+/* rules builder */
+.builder { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.cols > *, .pgrid > *, .builder > * { min-width: 0; }
+@media (max-width: 900px) { .builder { grid-template-columns: 1fr; } }
+.field { display: grid; gap: 4px; margin-bottom: 12px; align-content: start; min-width: 0; }
+.field label { font-weight: 600; font-size: .92rem; }
+.field input, .field select { border: 1.5px solid var(--line); background: var(--bg); border-radius: 12px; padding: 9px 12px; width: 100%; }
+.field input:focus, .field select:focus { border-color: var(--hot); outline: none; }
+.field small { color: var(--soft); }
+.row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+@media (max-width: 520px) { .row2 { grid-template-columns: minmax(0, 1fr); } }
+.err { color: var(--text); background: var(--surface-2); border-radius: 10px; padding: 8px 12px; margin: 0 0 12px; font-size: .92rem; }
+.rlist { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
+.rlist li { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--code-bg); border-radius: 10px; padding: 7px 12px; font-family: var(--mono); font-size: .8rem; }
+.rlist li button { background: transparent; border: 0; cursor: pointer; text-decoration: underline; font-size: .85rem; }
+.planline { margin: 10px 0 0; font-size: .92rem; color: var(--soft); }
+
+/* tables */
+.tbl-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: .95rem; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--soft); font-weight: 600; }
+td:first-child { white-space: nowrap; }
+
+/* progress cards */
+.pgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.pgrid .card h3 { font-size: 1.1rem; }
+
+details { background: var(--surface); border: 1.5px solid var(--line); border-radius: 16px; padding: 0 20px; margin-bottom: 10px; }
+details summary { cursor: pointer; padding: 14px 0; font-weight: 600; list-style: none; display: flex; justify-content: space-between; gap: 12px; }
+details summary::after { content: "+"; font-size: 1.3rem; line-height: 1; }
+details[open] summary::after { content: "−"; }
+details p { margin: 0 0 14px; max-width: 64ch; color: var(--soft); }
+footer.foot { padding: 50px 0 60px; text-align: center; color: var(--soft); font-size: .92rem; }
+</style>
+</head>
+<body>
+
+</div>
+
+<!-- ============ GUIDE ============ -->
+<main id="viewGuide">
+  <header class="hero">
+    <div class="wrap">
+      <h1>OctoCheck</h1>
+      <p>Code review that runs inside Claude Code, one step you approve at a time. It reads your code, flags problems with file and line number, and never edits anything.</p>
+      <ol class="ribbon" aria-label="The flow at a glance">
+        <li><a href="#walkthrough" data-step="1">Install</a></li>
+        <li><a href="#walkthrough" data-step="2">Start</a></li>
+        <li><a href="#walkthrough" data-step="4">Approve</a></li>
+        <li><a href="#walkthrough" data-step="5">Continue</a></li>
+        <li><a href="#walkthrough" data-step="8">Read the report</a></li>
+      </ol>
+    </div>
+  </header>
+
+  <nav class="subnav" aria-label="Guide sections" id="subnav">
+    <div class="wrap">
+      <a href="#start">Before you start</a>
+      <a href="#walkthrough">Walkthrough</a>
+      <a href="#rules">Add your own rules</a>
+      <a href="#progress">Check progress</a>
+      <a href="#options">Options and settings</a>
+      <a href="#questions">Questions</a>
+    </div>
+  </nav>
+
+  <section class="sec" id="start">
+    <div class="wrap">
+      <h2>Before you start</h2>
+      <p class="intro">You need three things on your machine, then one command inside the project you want reviewed.</p>
+      <div class="cols">
+        <div class="card">
+          <h3>What you need</h3>
+          <ul>
+            <li>Claude Code, signed in</li>
+            <li>Git, with your project already a Git repository</li>
+            <li>Node.js 16 or newer, only for the install command</li>
+          </ul>
+          <p>It reviews Python, Java, HTML, CSS, JavaScript and Frappe code.</p>
+        </div>
+        <div class="card">
+          <h3>Install</h3>
+          <p>Open a terminal in your project folder, and run:</p>
+          <div class="copyrow"><pre class="code" id="cInstall">npx github:Octo-Advisory/octocheck .</pre><button class="btn small" type="button" data-copy="cInstall">Copy</button></div>
+          <p class="lbl">The dot means "this folder". To install somewhere else, put that folder's path instead.</p>
+        </div>
+      </div>
+      <div class="card" style="margin-top:18px">
+        <h3>Turn on the safety hook</h3>
+        <p>This is what guarantees OctoCheck cannot edit your code. Add the block below to your project's <code>.claude/settings.json</code>. If the file already has a <code>"hooks"</code> section, add the entry inside it rather than replacing the file.</p>
+        <div class="copyrow"><pre class="code" id="cHook">{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          { "type": "command", "command": "node .claude/hooks/block-source-write.cjs" }
+        ]
+      }
+    ]
+  }
+}</pre><button class="btn small" type="button" data-copy="cHook">Copy</button></div>
+        <div class="note"><p>Without the hook, OctoCheck is still told not to edit your code, but nothing stops a mistake. With it, any write outside the <code>octocheck/</code> folder is blocked.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="walkthrough">
+    <div class="wrap">
+      <h2>Your first review, step by step</h2>
+      <p class="intro">This is what you will see in VS Code. Click a step, or use Back and Next. The files on the left, the open file, and the Claude Code panel all change as the review moves forward.</p>
+      <div class="walk">
+        <div class="walk-left">
+          <ol class="steps" id="steps"></ol>
+          <div class="detail" id="detail" aria-live="polite"></div>
+        </div>
+        <div class="walk-right">
+          <div class="vs" aria-label="Simulated VS Code window">
+            <div class="vs-title"><strong>your-app — Visual Studio Code</strong><span class="vs-prog" id="vsProg"></span></div>
+            <div class="vs-main">
+              <div class="vs-explorer"><h4>Explorer</h4><div id="tree"></div></div>
+              <div class="vs-editor">
+                <div class="vs-tabs" id="tabs" role="tablist"></div>
+                <div class="vs-code" id="code"></div>
+              </div>
+            </div>
+            <div class="vs-panel">
+              <div class="vs-ptabs"><span id="ptTerm">Terminal</span><span id="ptChat">Claude Code</span></div>
+              <div class="vs-pbody" id="pbody"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="rules">
+    <div class="wrap">
+      <h2>Add your own rules</h2>
+      <p class="intro">The built-in rules cover seven categories plus contract impact, and they are the same for every project. Your team's rules live in a file called <code>rules.local.yaml</code> at the top of your project, and they start at category 8. You can also switch off a built-in rule that doesn't fit. Use the builder to write the lines for you.</p>
+      <div class="builder">
+        <div class="card">
+          <h3>Add a team rule</h3>
+          <div class="row2">
+            <div class="field"><label for="bStack">Language</label>
+              <select id="bStack"><option value="python">Python</option><option value="java">Java</option><option value="frontend">Frontend (HTML, CSS, JS)</option><option value="frappe">Frappe</option></select></div>
+            <div class="field"><label for="bFactor">Category number</label><input id="bFactor" type="number" min="1" value="8"><small>Use 8 or higher.</small></div>
+          </div>
+          <div class="field"><label for="bName">Category name</label><input id="bName" type="text" value="Team rules"></div>
+          <div class="field"><label for="bDesc">What should be flagged?</label><input id="bDesc" type="text" placeholder="API responses must use the shared envelope() helper"></div>
+          <div class="field"><label for="bSev">How serious is it?</label>
+            <select id="bSev"><option value="high">High</option><option value="medium" selected>Medium</option><option value="low">Low</option></select></div>
+          <p class="err" id="bErr" hidden></p>
+          <button class="btn primary" type="button" id="bAdd">Add rule</button>
+
+          <h3 style="margin-top:26px">Turn off a built-in rule</h3>
+          <div class="field"><label for="dId">Rule ID</label><input id="dId" type="text" placeholder="FE-6-01"><small>Every flag in a report shows its rule ID in square brackets.</small></div>
+          <p class="err" id="dErr" hidden></p>
+          <button class="btn" type="button" id="dAdd">Turn off this rule</button>
+        </div>
+        <div class="card">
+          <h3>Your rules.local.yaml</h3>
+          <ul class="rlist" id="rlist"></ul>
+          <div class="copyrow"><pre class="code" id="rPreview"></pre><button class="btn small" type="button" data-copy="rPreview">Copy</button></div>
+          <p class="planline" id="planLine"></p>
+          <div class="note"><p>Replace the contents of <code>rules.local.yaml</code> with this, including removing the <code>[]</code> line. The new rules apply the next time you run <code>/octocheck-init</code>. Disabled rules are listed at the top of <code>plan.md</code>, so a switched-off rule is never hidden.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="progress">
+    <div class="wrap">
+      <h2>Check progress and results</h2>
+      <p class="intro">Everything is stored as plain files in the <code>octocheck/</code> folder, so you can check in any time, even after closing VS Code.</p>
+      <div class="pgrid">
+        <div class="card"><h3>In the chat</h3><p>After every task, Claude Code tells you where things stand and waits.</p><pre class="code">Task 3 of 14 complete — 4 flags found.
+Continue with Task 4? (yes/no)</pre></div>
+        <div class="card"><h3>progress.json</h3><p>Every task is marked <code>pending</code> or <code>done</code>. This is also how a review resumes later.</p><pre class="code">{ "id": 3, "name": "app/parsers",
+  "status": "done" }</pre></div>
+        <div class="card"><h3>plan.md</h3><p>The plan you approved. Read it to see which tasks exist and what each one covers. Contract and flow tasks are added during the run and show up in progress.json.</p></div>
+        <div class="card"><h3>reports folder</h3><p>One report per run, named with the date and time, so runs never mix. It grows after every task, so you can read findings while the review is still going.</p><pre class="code">octocheck/reports/
+  report-2026-10-05-101530.md</pre></div>
+      </div>
+      <div class="cols" style="margin-top:18px">
+        <div class="card">
+          <h3>Close VS Code halfway?</h3>
+          <p>Nothing is lost. Open Claude Code in the same project and run <code>/octocheck-continue</code>. It carries on at the next pending task.</p>
+        </div>
+        <div class="card">
+          <h3>Run it again after fixing things</h3>
+          <p>Run <code>/octocheck-init</code> again. You get a new report. Files you did not touch are skipped, and their earlier flags appear under "Not re-reviewed this run", so an old problem never disappears just because nobody looked at it again.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="options">
+    <div class="wrap">
+      <h2>Options and settings</h2>
+      <p class="intro">The defaults work for most projects. These are the ways to change them.</p>
+      <div class="card">
+        <h3>Commands</h3>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>/octocheck-init</code></td><td>Builds the plan and waits for your approval.</td></tr>
+            <tr><td><code>/octocheck-init main</code></td><td>Plans a review of only the files that differ from the <code>main</code> branch. Fastest way to review a feature branch.</td></tr>
+            <tr><td><code>/octocheck-continue</code></td><td>Runs one task, then asks before the next.</td></tr>
+            <tr><td><code>/octocheck-continue --auto</code></td><td>Runs the remaining tasks without stopping after each one. It applies to that run only, and it still stops on a high-severity flag, a blocked action, or a change that affects too many files.</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div class="cols" style="margin-top:18px">
+        <div class="card">
+          <h3>Settings file</h3>
+          <p>The installer creates <code>octocheck.config.yaml</code> in your project. Use <code>0</code> or <code>off</code> to switch a setting off.</p>
+          <pre class="code"># Re-review a file not checked in this many days,
+# even if it has not changed.
+review_expiry_days: 19
+
+# Ask first if one change would pull in more
+# than this many other files.
+blast_radius_limit: 25</pre>
+        </div>
+        <div class="card">
+          <h3>Critical flows</h3>
+          <p>Tell OctoCheck which paths matter most, and it traces them end to end whenever a file on them changes. Add this to your <code>CLAUDE.md</code>, or let <code>/octocheck-init</code> ask you for it.</p>
+          <pre class="code">## Critical flows
+- checkout: app/cart.py → app/pricing.py → app/pay.py</pre>
+        </div>
+      </div>
+      <div class="card" style="margin-top:18px">
+        <h3>Update to the latest version</h3>
+        <p>Run the line for your terminal from your project folder. Your rules, settings and past reports are left alone.</p>
+        <p class="lbl">macOS, Linux, WSL</p>
+        <div class="copyrow"><pre class="code" id="cUpd1">rm -rf ~/.npm/_npx &amp;&amp; npx --yes github:Octo-Advisory/octocheck .</pre><button class="btn small" type="button" data-copy="cUpd1">Copy</button></div>
+        <p class="lbl">Windows PowerShell</p>
+        <div class="copyrow"><pre class="code" id="cUpd2">Remove-Item -Recurse -Force "$env:USERPROFILE\.npm\_npx" -ErrorAction SilentlyContinue; npx --yes github:Octo-Advisory/octocheck .</pre><button class="btn small" type="button" data-copy="cUpd2">Copy</button></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="questions">
+    <div class="wrap">
+      <h2>Questions</h2>
+      <p class="intro">&nbsp;</p>
+      <details><summary>Will it change my code?</summary><p>No. It reads your code and writes only inside the <code>octocheck/</code> folder. With the safety hook turned on, any attempt to edit a file elsewhere is blocked.</p></details>
+      <details><summary>Does it run by itself?</summary><p>Not yet. You start each run. A scheduled run that needs nobody at the keyboard has not been built.</p></details>
+      <details><summary>How much Claude usage does a review take?</summary><p>It uses your Claude Code usage like any other session, and it grows with the number of files reviewed. Skipping unchanged files and using <code>/octocheck-init main</code> keep repeat runs small.</p></details>
+      <details><summary>A flag is wrong for my project. What now?</summary><p>If a rule doesn't fit how your team works, turn it off in <code>rules.local.yaml</code> using the builder above. If a rule is wrong in general, open an issue on GitHub with the file, the line, and the rule ID.</p></details>
+      <details><summary>Why did it re-check a file I didn't touch?</summary><p>Because something that file uses changed. The report says which file changed and why. It also re-checks a file whose last review is older than the expiry setting.</p></details>
+      <details><summary>What can it not catch?</summary><p>It reads code but never runs it, so bugs that only appear while the program is running are out of reach. Connections built from text at runtime can also be missed. Tests remain the backup for those.</p></details>
+    </div>
+  </section>
+
+  <footer class="foot wrap">OctoCheck by Octo Advisory · MIT licence · <a href="https://github.com/Octo-Advisory/octocheck">View on GitHub</a></footer>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+/* ---------------- copy helper ---------------- */
+async function copyFrom(id, btn) {
+  const el = $(id);
+  const text = el.textContent;
+  const label = btn.textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+    btn.textContent = "Copied";
+  } catch (e) {
+    try {
+      const r = document.createRange(); r.selectNodeContents(el);
+      const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      btn.textContent = document.execCommand("copy") ? "Copied" : "Press Ctrl+C";
+    } catch (e2) { btn.textContent = "Press Ctrl+C"; }
+  }
+  setTimeout(() => { btn.textContent = label; }, 1600);
+}
+document.querySelectorAll("[data-copy]").forEach(b => b.addEventListener("click", () => copyFrom(b.dataset.copy, b)));
+
+document.documentElement.style.setProperty("--bar-h", "0px");
+
+/* ---------------- walkthrough data ---------------- */
+const BASE = ["app/", "frontend/", "README.md"];
+const INSTALL = [".claude/commands/octocheck-init.md", ".claude/commands/octocheck-continue.md", ".claude/hooks/block-source-write.cjs", "rules/rules.core.yaml", "rules.local.yaml", "octocheck.config.yaml"];
+const RPT = "octocheck/reports/report-2026-10-05-101530.md";
+const CONFIG = ["# Use 0 or off to switch a setting off.", "", "review_expiry_days: 19", "blast_radius_limit: 25"];
+const PROGRESS0 = ["{", '  "tasks": [],', '  "approved": false,', '  "run_report_file": null,', '  "changed": [],', '  "flows": []', "}"];
+const PLAN = ["# OctoCheck Review Plan — 2026-10-05", "", "Ruleset: rules.core.yaml v1.1.0 (0 core rules disabled: none)", "Settings: review expiry 19 days, blast-radius limit 25 files", "Report will be written to: " + RPT, "Critical flows: none declared", "", "## Task 1: app/onboarding", "- Type: review", "- Files: 12", "- Status: pending", "", "## Task 2: app/extraction", "- Type: review", "- Files: 9", "- Status: pending", "", "... 12 more tasks"];
+const taskJson = (done, total) => {
+  const names = ["app/onboarding", "app/extraction", "app/parsers", "app/doctype", "frontend/src", "frontend/views"];
+  const out = ["{", '  "approved": true,', '  "run_report_file": "' + RPT + '",', '  "tasks": ['];
+  names.forEach((n, i) => out.push('    { "id": ' + (i + 1) + ', "name": "' + n + '", "status": "' + (i < done ? "done" : "pending") + '" },'));
+  out.push("    ... " + (total - names.length) + " more tasks", "  ]", "}");
+  return out;
+};
+const REPORT1 = ["# OctoCheck Report — 2026-10-05-101530", "", "Ruleset version: 1.1.0", "", "### Factor 5 — Edge cases", "**app/onboarding/format_review.py**", "- format_review.py:74 — [FR-5-03] high — update_field_rule", "  has no ownership check before changing another user's", "  template.", "- format_review.py:186 — [FR-5-03] high — confirm_template", "  checks the role but not who owns the template.", "", "### Factor 4 — Test cases", "**app/onboarding/document_classifier.py**", "- document_classifier.py:127 — [PY-4-01] high — classify()", "  has no test coverage."];
+const REPORT_FULL = ["# OctoCheck Report — 2026-10-05-101530", "", "Ruleset version: 1.1.0", "Tasks completed: 14 / 14", "Total new flags this run: 31", "", "### Factor 3 — Dynamic paths", "### Factor 4 — Test cases", "### Factor 5 — Edge cases", "### Factor 6 — Org standards", "### Factor 7 — Optimize", "  ... flags grouped by file and line", "", "### Factor C — Contract impact", "  files re-checked because something they", "  use changed, with the reason for each", "", "## Not re-reviewed this run", "  none: this was the first run"];
+
+const STEPS = [
+  { s: "Install", title: "Install it in your project",
+    what: "One command, run inside the project you want reviewed. It copies two commands, a safety hook, the rule files and a settings file into your project. Nothing else is touched, and your own files are never overwritten.",
+    you: "In the VS Code terminal, run: npx github:Octo-Advisory/octocheck .",
+    files: BASE.concat(INSTALL), added: INSTALL, tabs: [{ n: "octocheck.config.yaml", l: CONFIG, hl: [3, 4] }], prog: null,
+    panel: { k: "term", lines: [
+      ["$ ", "npx github:Octo-Advisory/octocheck ."], ["", "Installing OctoCheck into /home/you/your-app"], ["", ""],
+      ["", "  copied .claude/commands/octocheck-init.md"], ["", "  copied .claude/commands/octocheck-continue.md"], ["", "  copied .claude/hooks/block-source-write.cjs"],
+      ["", "  copied rules/rules.core.yaml"], ["", "  copied rules/rules.local.yaml.example -> rules.local.yaml"], ["", "  copied octocheck.config.yaml.example -> octocheck.config.yaml"],
+      ["", "  appended OctoCheck entries to .gitignore"], ["", ""], ["", "Install complete. Next: open Claude Code in this repo and run /octocheck-init"] ] } },
+  { s: "Start", title: "Start with /octocheck-init",
+    what: "Open Claude Code in the project and type the command. It creates the octocheck/ working folder and checks for a CLAUDE.md, a short description of your app that every later task reads. It asks before writing anything.",
+    you: "Type /octocheck-init, then answer yes or no.",
+    files: BASE.concat(INSTALL, ["octocheck/progress.json", "octocheck/plan.md", "octocheck/reports/x"]), added: ["octocheck/progress.json", "octocheck/plan.md", "octocheck/reports/x"],
+    tabs: [{ n: "progress.json", l: PROGRESS0, hl: [3] }], prog: null,
+    panel: { k: "chat", msgs: [
+      { r: "u", t: "/octocheck-init" }, { r: "tool", t: "Read(CLAUDE.md) — not found" },
+      { r: "c", t: "I don't see a CLAUDE.md in this project. I'd like to create one covering your stack, folder structure, key modules and naming conventions, from a read-only scan of the code.\nYou can also name critical flows, the paths where a break would hurt most.\nCreate it? (yes/no)" } ] } },
+  { s: "Review plan", title: "Read the plan",
+    what: "After CLAUDE.md, it splits your code into small tasks and writes plan.md, then stops. No file has been reviewed yet. Open plan.md and look at the tasks and which folders each one covers.",
+    you: "Open octocheck/plan.md and read it.",
+    files: BASE.concat(INSTALL, ["CLAUDE.md", "octocheck/progress.json", "octocheck/plan.md", "octocheck/reports/x"]), added: ["CLAUDE.md", "octocheck/plan.md"],
+    tabs: [{ n: "plan.md", l: PLAN, hl: [8, 9, 10, 11] }, { n: "progress.json", l: PROGRESS0, hl: [] }], prog: [0, 14],
+    panel: { k: "chat", msgs: [
+      { r: "u", t: "yes" }, { r: "tool", t: "Write(CLAUDE.md)" }, { r: "tool", t: "Write(octocheck/plan.md)" },
+      { r: "c", t: "Created CLAUDE.md.\nHere's the review plan — 14 tasks covering 112 files. Approve this plan? (yes/no)" } ] } },
+  { s: "Approve", title: "Approve the plan",
+    what: "Say yes to approve it. If something is off, say what to change, such as skipping a folder, and it rewrites the plan and asks again. This is the only gate before any file is reviewed.",
+    you: "Reply yes.",
+    files: BASE.concat(INSTALL, ["CLAUDE.md", "octocheck/progress.json", "octocheck/plan.md", "octocheck/reports/x"]), added: [],
+    tabs: [{ n: "progress.json", l: taskJson(0, 14), hl: [2] }, { n: "plan.md", l: PLAN, hl: [] }], prog: [0, 14],
+    panel: { k: "chat", msgs: [
+      { r: "c", t: "Here's the review plan — 14 tasks covering 112 files. Approve this plan? (yes/no)" }, { r: "u", t: "yes" },
+      { r: "tool", t: "Write(octocheck/progress.json) — approved: true" }, { r: "c", t: "Approved. Run /octocheck-continue to start Task 1." } ] } },
+  { s: "First task", title: "Run the first task",
+    what: "/octocheck-continue runs exactly one task. It reads the files in that task, checks them against the rules, adds what it found to the report, and stops to ask. Files unchanged since an earlier run are skipped without being read.",
+    you: "Type /octocheck-continue.",
+    files: BASE.concat(INSTALL, ["CLAUDE.md", "octocheck/progress.json", "octocheck/plan.md", RPT, "octocheck/cache/graph/x"]), added: [RPT, "octocheck/cache/graph/x"],
+    tabs: [{ n: "report-2026-10-05-101530.md", l: REPORT1, hl: [6, 7, 8, 9, 10] }], prog: [1, 14],
+    panel: { k: "chat", msgs: [
+      { r: "u", t: "/octocheck-continue" }, { r: "tool", t: "Read(app/onboarding/format_review.py)" }, { r: "tool", t: "Read(app/onboarding/document_review.py)" }, { r: "tool", t: "Write(" + RPT + ")" },
+      { r: "c", t: "Task 1 of 14 complete — 6 flags found. Continue with Task 2? (yes/no)" } ] } },
+  { s: "Check progress", title: "See where you are",
+    what: "Progress is kept in plain files, so you can look any time. Each checkpoint says how many tasks are done. progress.json marks each task pending or done, and the report keeps growing. You can close VS Code now and pick this up tomorrow.",
+    you: "Reply yes to keep going, or open progress.json to look.",
+    files: BASE.concat(INSTALL, ["CLAUDE.md", "octocheck/progress.json", "octocheck/plan.md", RPT, "octocheck/cache/graph/x"]), added: [],
+    tabs: [{ n: "progress.json", l: taskJson(3, 14), hl: [5, 6, 7] }], prog: [3, 14],
+    panel: { k: "chat", msgs: [
+      { r: "u", t: "yes" }, { r: "c", t: "Task 2 of 14 complete — 3 flags found. Continue with Task 3? (yes/no)" }, { r: "u", t: "yes" },
+      { r: "c", t: "Task 3 of 14 complete — 4 flags found. Continue with Task 4? (yes/no)" } ] } },
+  { s: "Go hands-off", title: "Run the rest without stopping",
+    what: "Once you trust it, add --auto to run the remaining tasks back to back. It applies to that one run. It still stops if a task finds a high-severity flag, if an action is blocked, or if one change would affect more than 25 files.",
+    you: "Type /octocheck-continue --auto.",
+    files: BASE.concat(INSTALL, ["CLAUDE.md", "octocheck/progress.json", "octocheck/plan.md", RPT, "octocheck/cache/graph/x"]), added: [],
+    tabs: [{ n: "progress.json", l: taskJson(6, 14), hl: [7, 8, 9] }], prog: [6, 14],
+    panel: { k: "chat", msgs: [
+      { r: "u", t: "/octocheck-continue --auto" }, { r: "c", t: "Task 4 of 14 complete — 2 flags found." }, { r: "c", t: "Task 5 of 14 complete — 0 flags found." },
+      { r: "c", t: "Task 6 of 14 complete — 3 flags found, 1 of them high. Stopping to check with you. Continue? (yes/no)" } ] } },
+  { s: "Read report", title: "Read the report",
+    what: "When the last task finishes you get a summary and the report path. Flags are grouped by category, then file, then line. Contract impact lists files that were re-checked because something they use changed. Skipped files keep their old flags visible.",
+    you: "Open the report file from the octocheck/reports folder.",
+    files: BASE.concat(INSTALL, ["CLAUDE.md", "octocheck/progress.json", "octocheck/plan.md", RPT, "octocheck/cache/graph/x", "octocheck/cache/meta.json"]), added: ["octocheck/cache/meta.json"],
+    tabs: [{ n: "report-2026-10-05-101530.md", l: REPORT_FULL, hl: [1, 3, 4, 5] }], prog: [14, 14],
+    panel: { k: "chat", msgs: [
+      { r: "c", t: "Task 14 of 14 complete — 1 flag found." },
+      { r: "c", t: "Review complete.\n14 tasks, 112 files, 31 flags (9 high, 14 medium, 8 low).\nFiles skipped as unchanged: 0, since this was the first run. Next time unchanged files are skipped.\nReport: " + RPT } ] } }
+];
+
+let cur = 0, tabIdx = 0;
+function treeHTML(paths, added) {
+  const root = { c: {} };
+  paths.forEach(p => {
+    const leafDir = p.endsWith("/");
+    const parts = p.replace(/\/$/, "").split("/");
+    let n = root;
+    parts.forEach((part, i) => {
+      const last = i === parts.length - 1;
+      n.c[part] = n.c[part] || { c: {}, dir: false, path: parts.slice(0, i + 1).join("/") };
+      if (!last || leafDir) n.c[part].dir = true;
+      n = n.c[part];
+    });
+  });
+  const isNew = (node) => {
+    if (added.includes(node.path)) return true;
+    if (node.dir && !Object.keys(node.c).length) return false;
+    return Object.values(node.c).some(isNew) || added.some(a => a.startsWith(node.path + "/"));
+  };
+  let out = "";
+  const walk = (node, depth) => {
+    const kids = Object.entries(node.c).sort((a, b) => (b[1].dir - a[1].dir) || a[0].localeCompare(b[0]));
+    kids.forEach(([name, k]) => {
+      let label = name;
+      if (name === "x") return;
+      const fresh = isNew(k);
+      const hasKids = Object.keys(k.c).filter(x => x !== "x").length || Object.keys(k.c).includes("x");
+      const ch = k.dir ? (hasKids ? "▾" : "▸") : "";
+      out += `<div class="tr${fresh ? " new" : ""}" style="padding-left:${10 + depth * 14}px"><span class="ch">${ch}</span><span>${esc(label)}${k.dir ? "/" : ""}</span>${fresh ? '<span class="dot" title="New or changed in this step"></span>' : ""}</div>`;
+      if (k.dir) walk(k, depth + 1);
+    });
+  };
+  walk(root, 0);
+  return out;
+}
+function codeHTML(lines, hl) {
+  if (!lines || !lines.length) return '<div class="empty">Nothing here yet.</div>';
+  return lines.map((t, i) => `<div class="l${hl.includes(i + 1) ? " hl" : ""}"><span class="no">${i + 1}</span><span>${esc(t) || "&nbsp;"}</span></div>`).join("");
+}
+function renderSteps() {
+  $("steps").innerHTML = STEPS.map((s, i) => `<li><button type="button" data-i="${i}" ${i === cur ? 'aria-current="step"' : ""} class="${i < cur ? "past" : ""}"><span class="n">${i + 1}</span><span class="t">${esc(s.s)}</span></button></li>`).join("");
+  $("steps").querySelectorAll("button").forEach(b => b.addEventListener("click", () => go(+b.dataset.i)));
+}
+function renderDetail() {
+  const s = STEPS[cur];
+  $("detail").innerHTML = `<p class="cnt">Step ${cur + 1} of ${STEPS.length}</p><h3>${esc(s.title)}</h3><p>${esc(s.what)}</p><div class="you"><b>What you do</b>${esc(s.you)}</div><div class="ctl"><button class="btn small" type="button" id="bBack" ${cur === 0 ? "disabled" : ""}>Back</button><button class="btn small primary" type="button" id="bNext">${cur === STEPS.length - 1 ? "Start over" : "Next step"}</button></div>`;
+  $("bBack").onclick = () => go(cur - 1);
+  $("bNext").onclick = () => go(cur === STEPS.length - 1 ? 0 : cur + 1);
+}
+function renderMock() {
+  const s = STEPS[cur];
+  $("tree").innerHTML = treeHTML(s.files, s.added);
+  if (tabIdx >= s.tabs.length) tabIdx = 0;
+  $("tabs").innerHTML = s.tabs.map((t, i) => `<button type="button" role="tab" data-t="${i}" aria-selected="${i === tabIdx}">${esc(t.n)}</button>`).join("");
+  $("tabs").querySelectorAll("button").forEach(b => b.addEventListener("click", () => { tabIdx = +b.dataset.t; renderMock(); }));
+  const tab = s.tabs[tabIdx];
+  $("code").innerHTML = codeHTML(tab.l, tab.hl);
+  $("vsProg").innerHTML = s.prog ? `<span>${s.prog[0]} of ${s.prog[1]} tasks done</span><span class="vs-bar"><i style="width:${(s.prog[0] / s.prog[1]) * 100}%"></i></span>` : "<span>Review not started</span>";
+  const p = s.panel;
+  $("ptTerm").className = p.k === "term" ? "on" : "";
+  $("ptChat").className = p.k === "chat" ? "on" : "";
+  if (p.k === "term") {
+    $("pbody").innerHTML = `<div class="term">${p.lines.map(l => (l[0] ? `<span class="p">${esc(l[0])}</span>` : "") + esc(l[1])).join("\n")}</div>`;
+  } else {
+    $("pbody").innerHTML = p.msgs.map(m => m.r === "u" ? `<div class="m u"><span class="pr">&gt;</span>${esc(m.t)}</div>` : m.r === "tool" ? `<div class="m tool"><i></i>${esc(m.t)}</div>` : `<div class="m c">${esc(m.t)}</div>`).join("");
+  }
+  $("pbody").scrollTop = 0;
+}
+function go(i) { cur = Math.max(0, Math.min(STEPS.length - 1, i)); tabIdx = 0; renderSteps(); renderDetail(); renderMock(); }
+document.querySelectorAll(".ribbon a").forEach(a => a.addEventListener("click", () => go(+a.dataset.step - 1)));
+
+/* ---------------- rules builder ---------------- */
+const PREFIX = { python: "PY", java: "JV", frontend: "FE", frappe: "FR" };
+const rules = [];
+const HEADER = ["# rules.local.yaml — your team's rules", "# Category 8 and higher only. Built-in rules can be turned off with disabled: true."];
+function yamlLine(r) {
+  if (r.disabled) return `- { id: ${r.id}, disabled: true }`;
+  return `- { id: ${r.id}, stack: ${r.stack}, factor: ${r.factor}, factor_name: "${r.name}", description: "${r.desc}", severity: ${r.sev}, engine: llm }`;
+}
+function renderRules() {
+  $("rPreview").textContent = HEADER.concat(rules.length ? rules.map(yamlLine) : ["[]"]).join("\n");
+  $("rlist").innerHTML = rules.map((r, i) => `<li><span>${esc(r.id)}${r.disabled ? " (turned off)" : ""}</span><button type="button" data-i="${i}">Remove</button></li>`).join("");
+  $("rlist").querySelectorAll("button").forEach(b => b.addEventListener("click", () => { rules.splice(+b.dataset.i, 1); renderRules(); }));
+  const off = rules.filter(r => r.disabled).map(r => r.id);
+  $("planLine").textContent = off.length ? `plan.md will show: "${off.length} core rule${off.length > 1 ? "s" : ""} disabled: ${off.join(", ")}"` : 'plan.md will show: "0 core rules disabled: none"';
+}
+function showErr(id, msg) { const e = $(id); e.hidden = !msg; e.textContent = msg || ""; }
+$("bAdd").onclick = () => {
+  const stack = $("bStack").value, factor = parseInt($("bFactor").value, 10);
+  const name = $("bName").value.trim().replace(/"/g, "'") || "Team rules";
+  const desc = $("bDesc").value.trim().replace(/"/g, "'");
+  if (!Number.isInteger(factor) || factor < 8) return showErr("bErr", "Category numbers 1 to 7 are reserved for the built-in rules, so a rule using them would be ignored. Use 8 or higher.");
+  if (!desc) return showErr("bErr", "Say what should be flagged, in one sentence.");
+  showErr("bErr", "");
+  const pre = PREFIX[stack];
+  const n = rules.filter(r => !r.disabled && r.id.startsWith(pre + "-" + factor + "-")).length + 1;
+  rules.push({ id: `${pre}-${factor}-${String(n).padStart(2, "0")}`, stack, factor, name, desc, sev: $("bSev").value });
+  $("bDesc").value = "";
+  renderRules();
+};
+$("dAdd").onclick = () => {
+  const id = $("dId").value.trim().toUpperCase();
+  if (!/^((PY|JV|FE|FR)-([1-7]|C)-\d{2}|FLOW-01)$/.test(id)) return showErr("dErr", "That doesn't look like a built-in rule ID. They look like FE-6-01 or PY-C-02.");
+  if (rules.some(r => r.disabled && r.id === id)) return showErr("dErr", "That rule is already turned off.");
+  showErr("dErr", "");
+  rules.push({ id, disabled: true });
+  $("dId").value = "";
+  renderRules();
+};
+
+/* ---------------- subnav highlight ---------------- */
+const secs = ["start", "walkthrough", "rules", "progress", "options", "questions"];
+function markNav() {
+  if ($("viewGuide").hidden) return;
+  const y = window.scrollY + 180;
+  let on = null;
+  secs.forEach(id => { const el = $(id); if (el && el.offsetTop <= y) on = id; });
+  document.querySelectorAll("#subnav a").forEach(a => a.classList.toggle("on", a.getAttribute("href") === "#" + on));
+}
+window.addEventListener("scroll", markNav, { passive: true });
+
+/* ---------------- boot ---------------- */
+go(0);
+renderRules();
+</script>
+</body>
+</html>
