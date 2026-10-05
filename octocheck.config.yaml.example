@@ -1,0 +1,9 @@
+# Copy to octocheck.config.yaml in your project root (the installer does this if it's missing).
+# Use 0 or off to switch a setting off.
+
+# Re-review a file whose last review is older than this many days, even if it hasn't changed.
+# A safety net for connections between files that can't be seen by reading imports.
+review_expiry_days: 19
+
+# If one change would pull in more than this many other files for a contract check, ask first.
+blast_radius_limit: 25

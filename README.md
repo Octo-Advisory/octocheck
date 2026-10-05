@@ -68,7 +68,7 @@ backstop.
 
 ## Customizing rules
 
-- `rules/rules.core.yaml` — mandatory, factor IDs 1-7 per stack, versioned. Don't edit this
+- `rules/rules.core.yaml` — mandatory, factor IDs 1-7 plus `C` (contract impact) per stack, versioned. Don't edit this
   file directly in a project; it's meant to be updated centrally and re-installed. See
   `CONTRIBUTING.md` to propose a change.
 - `rules.local.yaml` (repo root) — edit this freely for two things:
@@ -78,13 +78,33 @@ backstop.
 
 See `rules/rules.local.yaml.example` for the exact syntax of both.
 
+## Which files get re-checked
+
+OctoCheck keeps a small map of who uses what (`octocheck/cache/graph/`, one file per source
+file), built while it reviews. When a file changes, only the files that use the changed
+function, field or export get a quick contract check — not a full review — and files on a
+declared critical flow get traced end to end. Unchanged files are skipped and their earlier
+flags are carried forward in the report. Two settings in `octocheck.config.yaml` tune this:
+`review_expiry_days` (default 19) and `blast_radius_limit` (default 25); `0` or `off` disables
+either.
+
+Declare critical flows in `CLAUDE.md` (`/octocheck-init` will offer):
+```
+## Critical flows
+- checkout: path/b.py → path/a.py → path/c.py
+```
+
+**Updating:** re-run the install command (clear npm's cache first, e.g.
+`rm -rf ~/.npm/_npx && npx --yes github:Octo-Advisory/octocheck .`). Upgrading from 0.1.x: the
+old `file-hashes.json` is ignored, so the first run re-reviews everything once to build the map.
+
 ## Design notes
 
 - Every rule runs through LLM judgment — there's no static linter step in this build.
 - Severity is locked to each rule's declared value in the YAML; it's never adjusted per
   instance, so reports stay comparable run to run and usable as a CI gate later.
-- `octocheck/cache/file-hashes.json` (via `git hash-object`) skips files unchanged since the
-  last run to keep token use down; delete it to force a full re-scan.
+- `git hash-object` fingerprints skip files unchanged since the last run to keep token use
+  down; delete `octocheck/cache/` to force a full re-scan.
 - `octocheck/progress.json` makes a review resumable — closing Claude Code mid-review and
   running `/octocheck-continue` again later picks up at the next pending task.
 - Read-only is enforced twice: `allowed-tools` in each command's frontmatter restricts what

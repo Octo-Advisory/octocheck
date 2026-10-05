@@ -1,9 +1,10 @@
-# OctoCheck Report — {date}
+# OctoCheck Report — {date-time, e.g. 2026-09-30-143805}
 
 Ruleset version: {version from rules.core.yaml's version comment}
 Tasks completed: {n} / {total}
-Files reviewed: {file_count} ({skipped_count} skipped as unchanged)
-Total flags: {flag_count}
+Files reviewed fresh this run: {file_count} ({skipped_count} skipped as unchanged — see the
+carry-forward section at the end)
+Total new flags this run: {flag_count}
 
 ## Factor 1 — Comments
 ### {file_path}
@@ -29,8 +30,36 @@ Total flags: {flag_count}
 ## Factor 7 — Optimize
 ...
 
+## Factor C — Contract impact
+**{file_path}** (re-checked because {trigger file} changed: {what})
+- {file}:{line} — [PY-C-01] high — {note}
+
+## Critical flows
+- {flow name}: [FLOW-01] high — {where the path breaks}
+
+## Re-checked, no contract issues
+{file_path}, {file_path}
+
+## Not re-reviewed this run (unchanged since last scan)
+
+These files weren't edited since the last review, so they were skipped to save tokens — the
+flags below are carried forward from the last time each file was actually checked, not
+re-verified this run.
+
+**{file_path}** (last reviewed {date from the cache entry})
+- {file}:{line} — [{rule_id}] {severity} — {note}, carried forward from a prior run
+
+**{file_path_with_no_known_flags}** (last reviewed {date})
+- No known flags from last review.
+
 <!--
-  One ## section per factor number actually flagged, in order.
-  Skip a factor heading entirely if it produced no flags — don't print empty sections.
-  Under each factor: one ### per file with at least one flag, table sorted by line number.
+  One ## section per factor number actually flagged, in order. Skip a factor heading
+  entirely if it produced no NEW flags this run — don't print empty sections.
+  Under each factor: one ### per file with at least one fresh flag, table sorted by line
+  number.
+
+  The "Not re-reviewed this run" section always appears if any file was skipped, even if
+  every skipped file has zero known flags — that's what makes the skip explicit rather
+  than silent. Every file skipped in Step 2 gets an entry here, whether or not it has
+  known_flags.
 -->

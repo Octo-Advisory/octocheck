@@ -36,6 +36,12 @@ else
   echo "  rules.local.yaml already exists — left untouched"
 fi
 
+if [ ! -f "$TARGET_DIR/octocheck.config.yaml" ]; then
+  cp -v "$SOURCE_DIR/octocheck.config.yaml.example" "$TARGET_DIR/octocheck.config.yaml"
+else
+  echo "  octocheck.config.yaml already exists — left untouched"
+fi
+
 if ! grep -q "octocheck/cache/" "$TARGET_DIR/.gitignore" 2>/dev/null; then
   echo "" >> "$TARGET_DIR/.gitignore"
   cat "$SOURCE_DIR/octocheck.gitignore.snippet" >> "$TARGET_DIR/.gitignore"

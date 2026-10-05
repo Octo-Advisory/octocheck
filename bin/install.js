@@ -46,6 +46,13 @@ if (!fs.existsSync(localRulesTarget)) {
   console.log('  rules.local.yaml already exists — left untouched');
 }
 
+const configTarget = path.join(targetDir, 'octocheck.config.yaml');
+if (!fs.existsSync(configTarget)) {
+  copyFile('octocheck.config.yaml.example', 'octocheck.config.yaml');
+} else {
+  console.log('  octocheck.config.yaml already exists — left untouched');
+}
+
 const gitignoreSnippet = fs.readFileSync(path.join(sourceDir, 'octocheck.gitignore.snippet'), 'utf8');
 const gitignorePath = path.join(targetDir, '.gitignore');
 const existingGitignore = fs.existsSync(gitignorePath) ? fs.readFileSync(gitignorePath, 'utf8') : '';

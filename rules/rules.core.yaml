@@ -1,9 +1,10 @@
 # OctoCheck core rules — mandatory for every install.
-# version: 1.0.0
+# version: 1.1.0
 # Bump this whenever a rule is added, removed, or its severity changes — the report
 # header records the version that produced it, so a report is traceable to the exact
 # rule set that generated it.
-# Reserved ID ranges (do not reuse in rules.local.yaml): factor numbers 1-7 per stack.
+# Reserved ID ranges (do not reuse in rules.local.yaml): factor numbers 1-7 and the letter C per stack.
+# Factor C (Contract impact) is checked only on files re-checked because something they use changed.
 # Team-added rules go in rules.local.yaml starting at factor 8.
 # engine is always "llm" by design — no static tooling is used in this build.
 
@@ -153,3 +154,28 @@
 - { id: FR-7-01, stack: frappe, factor: 7, factor_name: Optimize, description: "frappe.get_doc called inside a loop instead of a single frappe.get_all with the needed fields", severity: high, engine: llm }
 - { id: FR-7-02, stack: frappe, factor: 7, factor_name: Optimize, description: "Report/query selects all fields (SELECT *) or filters on an unindexed field", severity: medium, engine: llm }
 - { id: FR-7-03, stack: frappe, factor: 7, factor_name: Optimize, description: "Unused client-script event binding (dead frm.trigger)", severity: low, engine: llm }
+
+# ============================ CONTRACT IMPACT ============================
+# Factor C: does this file still use what changed elsewhere correctly? Only applied to files
+# re-checked because a function, field or file they use changed. PY-/FE- rules apply to Frappe too.
+- { id: PY-C-01, stack: python, factor: C, factor_name: "Contract impact", description: "Calls a function, method or class that was renamed or removed", severity: high, engine: llm }
+- { id: PY-C-02, stack: python, factor: C, factor_name: "Contract impact", description: "Call passes arguments that no longer match the changed signature (count, names, order)", severity: high, engine: llm }
+- { id: PY-C-03, stack: python, factor: C, factor_name: "Contract impact", description: "Relies on a return value, key or type that changed", severity: high, engine: llm }
+- { id: PY-C-04, stack: python, factor: C, factor_name: "Contract impact", description: "Imports from a module that was deleted or moved", severity: high, engine: llm }
+
+- { id: JV-C-01, stack: java, factor: C, factor_name: "Contract impact", description: "Calls a method or class that was renamed or removed", severity: high, engine: llm }
+- { id: JV-C-02, stack: java, factor: C, factor_name: "Contract impact", description: "Call passes arguments that no longer match the changed signature", severity: high, engine: llm }
+- { id: JV-C-03, stack: java, factor: C, factor_name: "Contract impact", description: "Relies on a return type, nullability or thrown exception that changed", severity: high, engine: llm }
+- { id: JV-C-04, stack: java, factor: C, factor_name: "Contract impact", description: "Imports a class that was deleted or moved", severity: high, engine: llm }
+
+- { id: FE-C-01, stack: frontend, factor: C, factor_name: "Contract impact", description: "Imports or calls an export that was renamed or removed", severity: high, engine: llm }
+- { id: FE-C-02, stack: frontend, factor: C, factor_name: "Contract impact", description: "Passes props or arguments that no longer match the changed component or function", severity: high, engine: llm }
+- { id: FE-C-03, stack: frontend, factor: C, factor_name: "Contract impact", description: "Relies on an API response shape or key that changed", severity: high, engine: llm }
+- { id: FE-C-04, stack: frontend, factor: C, factor_name: "Contract impact", description: "Imports from a file that was deleted or moved", severity: high, engine: llm }
+
+- { id: FR-C-01, stack: frappe, factor: C, factor_name: "Contract impact", description: "frappe.call or whitelisted method path string points to a method that was renamed or removed", severity: high, engine: llm }
+- { id: FR-C-02, stack: frappe, factor: C, factor_name: "Contract impact", description: "Uses a DocType field or key that was renamed or removed", severity: high, engine: llm }
+- { id: FR-C-03, stack: frappe, factor: C, factor_name: "Contract impact", description: "hooks.py entry points to a function or module that no longer exists", severity: high, engine: llm }
+- { id: FR-C-04, stack: frappe, factor: C, factor_name: "Contract impact", description: "Links to or loads a DocType that was renamed or deleted", severity: high, engine: llm }
+
+- { id: FLOW-01, stack: all, factor: C, factor_name: "Contract impact", description: "A declared critical flow no longer works end to end after a change", severity: high, engine: llm }

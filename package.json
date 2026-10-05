@@ -1,6 +1,6 @@
 {
   "name": "octocheck",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A read-only, LLM-based code review framework for Claude Code — Python, Java, Frontend, and Frappe.",
   "bin": {
     "octocheck-install": "./bin/install.js"

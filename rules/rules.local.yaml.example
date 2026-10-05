@@ -2,7 +2,7 @@
 #
 # Two things go here:
 #
-# 1. Team-added rules — factor 8+ only. Anything reusing a reserved factor 1-7 ID
+# 1. Team-added rules — factor 8+ only. Anything reusing a reserved factor 1-7 or C ID
 #    for its stack is discarded by /octocheck-init.
 #
 #    - { id: PY-8-01, stack: python, factor: 8, factor_name: "Team addition", description: "All API responses must use the shared envelope() helper", severity: medium, engine: llm }

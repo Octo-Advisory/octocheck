@@ -1,106 +1,128 @@
 ---
 description: Run the next pending OctoCheck task, then stop and ask before continuing
-allowed-tools: Read, Grep, Glob, Bash(git diff:*), Bash(git hash-object:*)
+allowed-tools: Read, Grep, Glob, Bash(git diff:*), Bash(git hash-object:*), Bash(git rev-parse:*), Bash(date:*)
 ---
 
-You are continuing an OctoCheck review. You must never use an Edit or Write tool on any file
-outside the `octocheck/` folder. You only read source files and record flags — never modify them.
+You are continuing an OctoCheck review. Never use Edit or Write on any file outside
+`octocheck/`. Only read source files and record flags — never modify them.
 
-**Default behavior is unchanged: stop after every task and wait for the user.** Only if the
-user explicitly invokes this command as `/octocheck-continue --auto` (or says something
-equivalent like "run all remaining tasks without stopping") should you skip the per-task
-checkpoint and move straight to the next pending task after finishing one — still stopping
-immediately, and reverting to asking, the moment you hit a task with high-severity flags, or
-if any tool call is blocked/denied. Never infer `--auto` from context or from the user seeming
-busy — it only applies when asked for, once, for that run.
+**Default: stop after every task and wait for the user.** Only if the user explicitly runs
+`/octocheck-continue --auto` (or clearly asks to run all remaining tasks without stopping)
+may you move straight to the next pending task, and even then stop and ask on any `high`
+flag, any blocked tool call, or a blast-radius question (Step 5). Never infer `--auto`.
+
+## Data you maintain (all under `octocheck/cache/`)
+**Graph entry** — one file per source file: `graph/<repo path with "/" replaced by "__">.json`,
+single-line JSON:
+`{"p":"app/a.py","h":"<git hash-object>","api":["get_User(id) -> dict; raises if missing"],`
+`"uses":["app/d.py#round_off"],"reexp":[],"flags":[{"l":5,"r":"PY-2-01","s":"medium","n":"..."}],`
+`"rev":"2026-10-05","del":false}`
+- `api`: what OTHER files can rely on — each public function/class/export/DocType field as
+  `name(params) -> return; <raises / side effects / odd cases, only if a caller must know>`.
+  Terse and consistent from run to run: wording noise creates false changes.
+- `uses`: `"<repo file path>#<symbol>"` for every cross-file reference, resolved to real repo
+  paths (use Glob): imports, requires, Java imports; Frappe `frappe.call("a.b.fn")` and
+  `hooks.py` dotted paths → `a/b.py#fn`; `frappe.get_doc/get_all/db.get_value("X")` → that
+  DocType's `.json` path (`#doctype`, or `#<fieldname>` for field use).
+- `reexp`: repo paths whose symbols this file passes through wholesale.
+- `flags`: this file's known flags, including contract (`-C-`) flags.
+
+**`meta.json`**: `{"last_run_commit":"<sha>","flow_flags":{"<flow>":[...]}}`.
+**Config**: `octocheck.config.yaml` (`review_expiry_days` default 19, `blast_radius_limit`
+default 25; `0`/`off` disables).
+
+**Find dependents of symbol S in file P** (Grep over `octocheck/cache/graph/`, fixed strings,
+skip `"del":true`): entries containing `"P#S"` are direct dependents. Also find pass-through
+files Q with Grep `"reexp":\[[^]]*"P"`, then repeat for `"Q#S"`. Keep a visited list so loops
+end. Follow no further than that.
 
 ## Step 1 — Load state
-Read `octocheck/progress.json`. If `"approved"` is not `true`, stop and tell the user to run
-`/octocheck-init` and approve the plan first. Otherwise find the first task with
-`"status": "pending"`. If there is none, tell the user the review is complete and point them
-to the latest file in `octocheck/reports/`.
+Read `progress.json`. If `approved` isn't `true`, tell the user to run `/octocheck-init` first.
+Take the first task with `status: pending`. None left → go to Step 7. Read the config and run
+`date +%F` once. Branch on the task's `type`: `review` → Step 2, `contract` → Step 3,
+`flow` → Step 4.
 
-## Step 2 — Skip unchanged files, but carry forward what's already known
-For each file in the task, run `git hash-object <path>` to get its current blob hash, and
-compare it against the `"hash"` value stored for that path in `octocheck/cache/file-hashes.json`
-(entries there look like `{"path": {"hash": "...", "known_flags": [...]}}`). If they match:
-- Skip the file entirely — do not read its contents. This is the token-saving step; a file
-  that hasn't moved since the last run costs zero tokens to re-check.
-- But do NOT skip it in the report. Carry its stored `known_flags` (if any) into this run's
-  report under the "Not re-reviewed this run" section (see Step 4) — an old flag must never
-  just vanish because its file wasn't touched. If `known_flags` is empty, still list the file
-  there with "No known flags from last review," so the report is explicit about what wasn't
-  re-checked rather than silent about it.
+## Step 2 — `review` task
+1. **One call each, for the whole task:** `git hash-object <all task files>` (one hash per
+   line, same order), and one Grep over `octocheck/cache/graph/` for
+   `"p":"(path1|path2|...)"` to load their entries.
+2. **Skip** a file when its entry exists, `h` matches, and it isn't expired (`rev` older than
+   `review_expiry_days`). Don't read it. Queue its entry's `flags` for the report's
+   "Not re-reviewed" section (list it even with no flags). Expired files are reviewed and noted
+   "(review expired)".
+3. **Review** every other file: read it and evaluate it against each active rule whose `stack`
+   matches and whose factor isn't `C`. All checks are judgment — there is no static tool.
+   Record `{file}:{line} — [{rule_id}] {severity} — {one-line description}`.
+   - **Severity is locked to the value in the YAML** — never raise or lower it. Put context in
+     the description instead.
+   - If the old entry has contract (`-C-`) flags, re-check each one and keep those that still
+     apply.
+   - If the file uses a symbol listed in `progress.json` `changed`, also check that use with
+     the stack's `C` rules (Step 3 method).
+4. **Update the entry:** compute new `api`, `uses`, `reexp`; set `h`, `flags`, `rev` = today.
+   Read the existing entry file first if it exists, then Write (new entries: just Write).
+5. **Detect changed symbols:** compare old `api` with new. A symbol is changed if it was
+   removed or renamed, its parameters changed, or a caller would notice a difference in what
+   it returns or raises. Added symbols are not changes. Ignore wording-only differences. No old
+   entry → nothing to compare.
+6. If any changed: add `{"f":"<file>","syms":[...],"what":"<old → new, short>"}` to
+   `changed`, then queue follow-up tasks (Step 5).
 
-If the hash doesn't match (file changed or is new), proceed to Step 3 to actually review it.
+## Step 3 — `contract` task (only the contract check, not a full review)
+For each file in the task, for each trigger: Grep the file for the symbol (or its import) to
+find call sites, and Read only those regions (offset/limit), not the whole file. Using the
+trigger's `what`, apply the stack's `C` rules: does this file still use the changed symbol
+correctly (name exists, arguments, expected return shape, fields, import path, method-path
+string)? Record flags as `{file}:{line} — [{rule_id}] {severity} — … (because {trigger file}
+changed: {what})`. Add them to the file's entry `flags` (replace earlier C flags for the same
+trigger), keeping its `h` and `rev`. Files with no problem are listed as "re-checked, no
+contract issues".
 
-## Step 3 — Review the remaining files
-For every file that changed or is new, read it and evaluate it against every rule in
-`rules.core.yaml` (and `rules.local.yaml`) whose `stack` matches that file's language and
-whose `factor` was listed for this task in `plan.md`. Every check is a judgment call — reason
-about the code directly, there is no static tool to fall back on. For each violation found,
-record:
+## Step 4 — `flow` task
+For the named flow, walk its files in order. For each consecutive pair, Read only the
+functions on the hand-off (find them via the `uses` entries and Grep) and check the whole path
+still holds: the call still exists, inputs match, what comes back is still what the next step
+expects. Report breaks as `[FLOW-01]`, naming the step where it breaks. Store the result in
+`meta.json` `flow_flags`.
 
-```
-{file}:{line} — [{rule_id}] {severity} — {one-line description of what's wrong here}
-```
+## Step 5 — Queue follow-up tasks (after Step 2.6)
+For each changed symbol, find dependents (see above). Then:
+- One `contract` task per dependent file (merge triggers if a pending one exists). If the
+  dependent still has a pending `review` task, skip it — Step 2.3 covers it there.
+- Count dependents for this change. Above `blast_radius_limit`: **stop and ask**: "Changing
+  {file} affects {N} files, above the limit of {limit}. 1) check all, 2) check only direct
+  callers, 3) skip and list them in the report." Follow the answer. (Applies in `--auto` too.)
+- If the changed file is on a declared flow with no `flow` task yet this run, add one.
+Append new tasks to the end of `tasks`, with a `trigger` reason.
 
-**Severity is locked to the rule's declared value in rules.core.yaml / rules.local.yaml —
-never raise or lower it based on context.** If the surrounding code genuinely changes how much
-the issue matters (e.g. a missing test on a trivial data-only class vs. a missing test on
-critical business logic), say so in the description text, but the `{severity}` field itself
-always matches what that rule ID declares. This keeps severity comparable across runs and
-usable as a CI gate later.
+## Step 6 — Report and checkpoint
+Append to `run_report_file` from `progress.json` (create it on the first task with a header:
+date/time and the rule set `# version:` from `rules.core.yaml`). Under
+`### Factor <N> — <name>` headings, grouped by file, add this task's new flags. **File each
+flag under the factor of its own rule ID — never recategorize.** Contract flags go under
+`### Factor C — Contract impact`, each file labelled with why it was re-checked. Flow breaks
+go under `## Critical flows`.
 
-## Step 4 — Append to the report
-Read `"run_report_file"` from `progress.json` — that exact path (set once by `/octocheck-init`
-at the start of this run, e.g. `octocheck/reports/report-2026-09-30-143805.md`) is where every
-task in this run writes, never recomputed per task. On the first task of the run, create it
-starting with a header naming the date/time and the `# version:` value read from the top of
-`rules.core.yaml` (see `templates/report.md.template`), so every report is traceable to the
-exact rule set that produced it. Append this task's freshly-found flags under a `### Factor <N>
-— <name>` heading per factor, grouped further by file, matching the format used across all
-prior tasks so the file merges into one consistent document as tasks complete.
-
-**The factor heading a flag is filed under must always be the factor number of its own rule
-ID — never recategorize by judgment.** `PY-7-02` is a Factor 7 rule; it goes under `### Factor
-7 — Optimize` even if the specific instance also touches on org standards or anything else. If
-a rule's ID and its factor genuinely seem mismatched, that's a rules.core.yaml issue to flag
-separately — the report itself must stay mechanically consistent with the rule's declared
-factor.
-
-At the very end of the report (after every task's factor sections), maintain one running
-section for the whole run:
-
+Keep one running section at the end of the report:
 ```markdown
 ## Not re-reviewed this run (unchanged since last scan)
-
-These files weren't edited since the last review, so they were skipped to save tokens — the
-flags below are carried forward from the last time each file was actually checked, not
-re-verified this run.
-
-**{file path}** (last reviewed {date from the cache entry, if available})
-- {file}:{line} — [{rule_id}] {severity} — {note}, carried forward from a prior run
+Skipped to save tokens. Flags below are carried forward from each file's last review, not
+re-verified now.
+**{file}** (last reviewed {rev})
+- {file}:{line} — [{rule_id}] {severity} — {note}, carried forward
+**{file}** — No known flags from last review.
 ```
+Also list contract-checked files with no problem under "Re-checked, no contract issues".
 
-Append each Step-2-skipped file here as its task completes, so by the end of the run this
-section covers every file that was skipped across all tasks, not just the last one.
-
-## Step 5 — Update state and checkpoint
-Mark this task `"status": "done"` in `progress.json`. For each file actually reviewed this
-task (Step 3, not skipped), update its entry in `cache/file-hashes.json` to
-`{"hash": "<new hash>", "known_flags": [<this run's flags for that file, or [] if none>],
-"last_reviewed": "<today's date>"}` — this replaces whatever was there before, since it
-reflects a fresh check. For files skipped in Step 2, leave their cache entry untouched.
-
-Then, unless running in `--auto` mode (see above), stop and tell the user exactly:
+Mark the task `done` in `progress.json` (write it back with the updated `changed`/`tasks`).
+Then, unless `--auto`, stop and say exactly:
 
 > "Task {n} of {total} complete — {flag count} flags found. Continue with Task {n+1}? (yes/no)"
 
-Do not start the next task yourself. Wait for the user to run `/octocheck-continue` again or
-reply yes.
+(`{total}` includes tasks added during the run.) In `--auto`, report the same line without the
+question and continue, except stop and ask on any `high` flag, a blocked tool call, or an
+unresolved error.
 
-In `--auto` mode, instead report the same line without the question, then immediately start
-the next pending task in the same turn — except stop and ask as normal if this task produced
-any `high` severity flag, or if a task hit an unresolved error (e.g. a blocked tool call).
-When every task is done, report a final summary and stop regardless of mode.
+## Step 7 — Run complete
+Set `last_run_commit` in `meta.json` to `git rev-parse HEAD`. Give a short summary: tasks run,
+flags by severity, files skipped, contract checks done, and the report path. Stop.

@@ -14,7 +14,7 @@ go through review — this isn't the place for something specific to your team's
    projects generally rather than just yours, and a suggested severity (`high` / `medium` /
    `low`).
 2. If it's accepted, submit a PR adding the entry to `rules/rules.core.yaml`:
-   - `id`: `<STACK>-<factor>-<NN>` — reuse an existing factor number (1-7) if the rule fits
+   - `id`: `<STACK>-<factor>-<NN>` — reuse an existing factor (1-7, or `C` for contract impact) if the rule fits
      one of the seven categories already defined; propose a new factor only with strong
      justification, since factor numbers are meant to stay stable across the whole rule set.
    - `engine`: `llm` — this build has no static-tooling path (see README's design notes).
