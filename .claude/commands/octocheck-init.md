@@ -45,7 +45,7 @@ local entry:
 - Otherwise (factor 8+) → add as a team rule.
 
 Read `octocheck.config.yaml` if present. Settings (defaults if the file or key is missing):
-`review_expiry_days: 19`, `blast_radius_limit: 25`. A value of `0` or `off` disables that
+`review_expiry_days: 19`, `blast_radius_limit: 25`, `skip_files` (see Step 5). A value of `0` or `off` disables that
 setting. Copy the effective values into `plan.md`'s header.
 
 ## Step 4 — Deleted files since the last run
@@ -61,7 +61,18 @@ deletions). For each deleted path that has an entry in `octocheck/cache/graph/`:
 ## Step 5 — Build the task plan
 Split the codebase into `review` tasks, one per top-level folder or module, capped at about 15
 files each so context stays bounded. Files unchanged since the last run are skipped cheaply
-during execution (`/octocheck-continue` compares hashes), so list every file; don't pre-filter.
+during execution (`/octocheck-continue` compares hashes), so don't pre-filter by change. But
+never put these in any task, since they hold nothing to review and cost tokens: files matching
+`skip_files` from the config, and anything Git ignores. If `skip_files` is missing, use this
+default list:
+`.pre-commit-config.yaml`, `.editorconfig`, `.gitignore`, `.eslintrc*`, `.prettierrc*`,
+`modules.txt`, `*.lock`, `package-lock.json`, `*.md`, `LICENSE*`, images and fonts (`*.png`,
+`*.jpg`, `*.jpeg`, `*.gif`, `*.svg`, `*.ico`, `*.woff*`, `*.pdf`), minified or generated files
+(`*.min.js`, `*.min.css`, `*.map`), and folders `node_modules/`, `dist/`, `build/`,
+`__pycache__/`. Never skip `requirements.txt`, `package.json`, `pom.xml` or `patches.txt`:
+some rules check them.
+If the config sets `skip_files`, that list replaces the default. Empty files are skipped later,
+during execution.
 
 If the user passed a branch or commit (e.g. `/octocheck-init main`), skip the full split: run
 `git diff --name-only <ref>...HEAD` and build the plan from only those files (one task, or
@@ -85,7 +96,7 @@ Write `octocheck/plan.md`:
 # OctoCheck Review Plan — <date>
 
 Ruleset: rules.core.yaml v<version> (<N> core rules disabled: <ids or "none">)
-Settings: review expiry <N days|off>, blast-radius limit <N files|off>
+Settings: review expiry <N days|off>, blast-radius limit <N files|off>, skip list <default|custom>
 Report will be written to: octocheck/reports/report-<timestamp>.md
 Critical flows: <names, or "none declared">
 

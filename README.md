@@ -93,6 +93,8 @@ declared critical flow get traced end to end. Unchanged files are skipped and th
 flags are carried forward in the report. Two settings in `octocheck.config.yaml` tune this:
 `review_expiry_days` (default 19) and `blast_radius_limit` (default 25); `0` or `off` disables
 either.
+`skip_files` lists files that are never reviewed (lock files, images, `*.md`, minified and
+generated files, and similar); empty files are always skipped.
 
 Declare critical flows in `CLAUDE.md` (`/octocheck-init` will offer):
 ```

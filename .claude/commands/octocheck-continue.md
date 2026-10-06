@@ -46,7 +46,10 @@ Take the first task with `status: pending`. None left → go to Step 7. Read the
 1. **One call each, for the whole task:** `git hash-object <all task files>` (one hash per
    line, same order), and one Grep over `octocheck/cache/graph/` for
    `"p":"(path1|path2|...)"` to load their entries.
-2. **Skip** a file when its entry exists, `h` matches, and it isn't expired (`rev` older than
+2. **Ignore empty files:** a hash of `e69de29bb2d1d6434b8b29ae775ad8c2e48c5391` is an empty
+   file. Don't read it and don't create an entry; count it under "empty files ignored" in the
+   final summary. Also ignore any file matching `skip_files` that slipped into a task.
+   **Skip** a file when its entry exists, `h` matches, and it isn't expired (`rev` older than
    `review_expiry_days`). Don't read it. Queue its entry's `flags` for the report's
    "Not re-reviewed" section (list it even with no flags). Expired files are reviewed and noted
    "(review expired)".

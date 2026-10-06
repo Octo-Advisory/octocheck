@@ -7,3 +7,34 @@ review_expiry_days: 19
 
 # If one change would pull in more than this many other files for a contract check, ask first.
 blast_radius_limit: 25
+
+# Files OctoCheck never reviews: nothing in them to check, so reading them only costs tokens.
+# This list replaces the built-in default if you set it, so keep the lines you still want.
+# Empty files are always skipped automatically. Note: requirements.txt, package.json and
+# patches.txt are deliberately NOT skipped, because some rules check them.
+skip_files:
+  - ".pre-commit-config.yaml"
+  - ".editorconfig"
+  - ".gitignore"
+  - ".eslintrc*"
+  - ".prettierrc*"
+  - "modules.txt"
+  - "*.lock"
+  - "package-lock.json"
+  - "*.md"
+  - "LICENSE*"
+  - "*.png"
+  - "*.jpg"
+  - "*.jpeg"
+  - "*.gif"
+  - "*.svg"
+  - "*.ico"
+  - "*.woff*"
+  - "*.pdf"
+  - "*.min.js"
+  - "*.min.css"
+  - "*.map"
+  - "node_modules/**"
+  - "dist/**"
+  - "build/**"
+  - "__pycache__/**"
