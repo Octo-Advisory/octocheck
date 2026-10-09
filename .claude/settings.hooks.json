@@ -9,6 +9,15 @@
             "command": "node .claude/hooks/block-source-write.cjs"
           }
         ]
+      },
+      {
+        "matcher": "Read|Grep|Glob|Bash|Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/block-credentials-read.cjs"
+          }
+        ]
       }
     ]
   }

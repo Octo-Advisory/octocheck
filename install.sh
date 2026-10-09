@@ -22,10 +22,12 @@ fi
 echo "Installing OctoCheck into $TARGET_DIR"
 echo
 
-mkdir -p "$TARGET_DIR/.claude/commands" "$TARGET_DIR/.claude/hooks"
+mkdir -p "$TARGET_DIR/.claude/commands" "$TARGET_DIR/.claude/hooks" "$TARGET_DIR/.claude/scripts"
 cp -v "$SOURCE_DIR/.claude/commands/octocheck-init.md" "$TARGET_DIR/.claude/commands/"
 cp -v "$SOURCE_DIR/.claude/commands/octocheck-continue.md" "$TARGET_DIR/.claude/commands/"
 cp -v "$SOURCE_DIR/.claude/hooks/block-source-write.cjs" "$TARGET_DIR/.claude/hooks/"
+cp -v "$SOURCE_DIR/.claude/hooks/block-credentials-read.cjs" "$TARGET_DIR/.claude/hooks/"
+cp -v "$SOURCE_DIR/.claude/scripts/octocheck-site.cjs" "$TARGET_DIR/.claude/scripts/"
 
 mkdir -p "$TARGET_DIR/rules"
 cp -v "$SOURCE_DIR/rules/rules.core.yaml" "$TARGET_DIR/rules/"
@@ -55,5 +57,7 @@ echo "Hooks config (.claude/settings.hooks.json) was NOT auto-merged — setting
 echo "is often already customized per project. Merge it in by hand:"
 echo "  $SOURCE_DIR/.claude/settings.hooks.json"
 echo "into your project's .claude/settings.json under the \"hooks\" key."
+echo "It registers two hooks: the write guard and the credentials guard (needed only if you review"
+echo "Frappe sites; the site setup refuses to save a secret without it)."
 echo
 echo "Install complete. Next: open Claude Code in this repo and run /octocheck-init"

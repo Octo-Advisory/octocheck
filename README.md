@@ -38,16 +38,19 @@ bash octocheck-plugin/install.sh /path/to/your-repo
 Either way, this:
 - copies `.claude/commands/octocheck-init.md`, `.claude/commands/octocheck-continue.md`, and
   `.claude/hooks/block-source-write.cjs` into your repo
+- copies `.claude/hooks/block-credentials-read.cjs` and `.claude/scripts/octocheck-site.cjs`
+  (used only for reviewing Frappe sites, see below)
 - copies `rules/rules.core.yaml` in, and drops a starter `rules.local.yaml` at the root if you
   don't already have one
 - appends recommended entries to your `.gitignore` (safe to skip if you'd rather commit
   everything — see `octocheck.gitignore.snippet`)
 
-**Then enable the hook** — not auto-merged, since your project's `.claude/settings.json` may
+**Then enable the hooks** — not auto-merged, since your project's `.claude/settings.json` may
 already be customized: open `.claude/settings.hooks.json` from this repo and merge its
-`"hooks"` key into your project's `.claude/settings.json`. Without this step, read-only
-enforcement still works via `allowed-tools`, just without the independent process-level
-backstop.
+`"hooks"` key into your project's `.claude/settings.json`. It registers two hooks: the write
+guard, and the credentials guard (which only matters if you review Frappe sites). Without
+this step, read-only enforcement still works via `allowed-tools`, just without the independent
+process-level backstop.
 
 ## Use
 
@@ -71,6 +74,50 @@ backstop.
    complete.
 6. Open `octocheck/reports/report-<date>.md` — flags grouped by factor, then file, then line,
    headed by the ruleset version that produced them.
+
+## Reviewing a Frappe site's UI scripts (preview)
+
+OctoCheck can also review Server Scripts and Client Scripts that live in a Frappe site's
+database, through the read-only `octocheck_connector` app installed on that site
+(`github.com/Octo-Advisory/octocheck_frappe`, v0.1.0 or later). This part is being built in
+steps; **today only the connection setup exists**.
+
+**One-time setup per site.** Run this in a normal terminal, **not inside Claude Code**. The key
+and secret are typed at a hidden prompt, so they never appear in a conversation:
+
+```bash
+node .claude/scripts/octocheck-site.cjs setup --site my-site
+```
+
+It asks for the site address (first time only) and the API key and secret, checks them against
+the site **before saving anything**, then reports who it connected as. Use `--profile bot` for
+the unattended nightly user, which must have only the OctoCheck Reviewer role. Other commands:
+
+```bash
+node .claude/scripts/octocheck-site.cjs check  --site my-site   # test the saved key
+node .claude/scripts/octocheck-site.cjs rotate --site my-site   # replace a key (checked before it replaces the old one)
+node .claude/scripts/octocheck-site.cjs list                    # sites and profiles, never secrets
+```
+
+**Where things are kept**
+- `octocheck.sites.json` in your repo: site names and addresses only, for example
+  `{"my-site": {"url": "http://localhost:88"}}`. No secrets, so it is safe to commit.
+- `~/.config/octocheck/octocheck-credentials.json`: the keys and secrets, outside every repo.
+  The folder is readable only by you (`700`, file `600`). Under WSL this must be your Linux
+  home, not `/mnt/c` or `/mnt/d`, where permissions are not enforced; setup refuses a Windows
+  drive.
+
+**How secrets are kept away from Claude**
+- Only the site script ever reads the credentials file. It makes the HTTP calls itself, so a
+  secret is never in a prompt, a command line, a log or a report, and errors are masked.
+- The credentials guard hook blocks any Claude tool call that touches that folder, because
+  `Read` is pre-approved without limits in the commands. Setup refuses to save a secret if
+  the hook isn't registered in `.claude/settings.json`.
+- A secret is never sent over plain `http` to a public host (a local or private-network
+  address is allowed with a note), redirects are never followed, and certificate checks are
+  never switched off.
+
+Run the script's tests with `npm test`.
 
 ## Customizing rules
 

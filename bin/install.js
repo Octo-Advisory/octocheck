@@ -37,6 +37,8 @@ console.log(`Installing OctoCheck into ${targetDir}\n`);
 copyFile('.claude/commands/octocheck-init.md', '.claude/commands/octocheck-init.md');
 copyFile('.claude/commands/octocheck-continue.md', '.claude/commands/octocheck-continue.md');
 copyFile('.claude/hooks/block-source-write.cjs', '.claude/hooks/block-source-write.cjs');
+copyFile('.claude/hooks/block-credentials-read.cjs', '.claude/hooks/block-credentials-read.cjs');
+copyFile('.claude/scripts/octocheck-site.cjs', '.claude/scripts/octocheck-site.cjs');
 copyFile('rules/rules.core.yaml', 'rules/rules.core.yaml');
 
 const localRulesTarget = path.join(targetDir, 'rules.local.yaml');
@@ -66,6 +68,7 @@ if (!existingGitignore.includes('octocheck/cache/')) {
 console.log('\nHooks config (.claude/settings.hooks.json) was NOT auto-merged — settings.json');
 console.log('is often already customized per project. Merge it in by hand:');
 console.log(`  ${path.join(sourceDir, '.claude', 'settings.hooks.json')}`);
-console.log('into your project\'s .claude/settings.json under the "hooks" key.\n');
+console.log('into your project\'s .claude/settings.json under the "hooks" key. It registers two hooks: the write guard and the');
+console.log('credentials guard (needed only if you review Frappe sites; the site setup refuses to save a secret without it).\n');
 
 console.log('Install complete. Next: open Claude Code in this repo and run /octocheck-init');
