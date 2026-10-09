@@ -28,6 +28,9 @@ cp -v "$SOURCE_DIR/.claude/commands/octocheck-continue.md" "$TARGET_DIR/.claude/
 cp -v "$SOURCE_DIR/.claude/hooks/block-source-write.cjs" "$TARGET_DIR/.claude/hooks/"
 cp -v "$SOURCE_DIR/.claude/hooks/block-credentials-read.cjs" "$TARGET_DIR/.claude/hooks/"
 cp -v "$SOURCE_DIR/.claude/scripts/octocheck-site.cjs" "$TARGET_DIR/.claude/scripts/"
+cp -v "$SOURCE_DIR/.claude/scripts/octocheck-fetch.cjs" "$TARGET_DIR/.claude/scripts/"
+cp -v "$SOURCE_DIR/.claude/scripts/octocheck-schema.cjs" "$TARGET_DIR/.claude/scripts/"
+cp -v "$SOURCE_DIR/.claude/scripts/bundle_schema_v1.json" "$TARGET_DIR/.claude/scripts/"
 
 mkdir -p "$TARGET_DIR/rules"
 cp -v "$SOURCE_DIR/rules/rules.core.yaml" "$TARGET_DIR/rules/"

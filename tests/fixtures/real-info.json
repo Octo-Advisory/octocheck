@@ -1,0 +1,22 @@
+{
+ "access_mode": "reviewer",
+ "apps": {
+  "frappe": "15.0.0-stub"
+ },
+ "bundle_version": 1,
+ "connector_version": "0.1.0",
+ "counts": {
+  "Client Script": 1,
+  "Server Script": 7
+ },
+ "excluded_modules": [],
+ "exposed_types": [
+  "Server Script",
+  "Client Script"
+ ],
+ "frappe_version": "15.0.0-stub",
+ "page_size": 25,
+ "server_time": "2026-10-08 12:00:00",
+ "site": "stub.localhost",
+ "user": "Administrator"
+}

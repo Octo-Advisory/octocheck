@@ -39,6 +39,9 @@ copyFile('.claude/commands/octocheck-continue.md', '.claude/commands/octocheck-c
 copyFile('.claude/hooks/block-source-write.cjs', '.claude/hooks/block-source-write.cjs');
 copyFile('.claude/hooks/block-credentials-read.cjs', '.claude/hooks/block-credentials-read.cjs');
 copyFile('.claude/scripts/octocheck-site.cjs', '.claude/scripts/octocheck-site.cjs');
+copyFile('.claude/scripts/octocheck-fetch.cjs', '.claude/scripts/octocheck-fetch.cjs');
+copyFile('.claude/scripts/octocheck-schema.cjs', '.claude/scripts/octocheck-schema.cjs');
+copyFile('.claude/scripts/bundle_schema_v1.json', '.claude/scripts/bundle_schema_v1.json');
 copyFile('rules/rules.core.yaml', 'rules/rules.core.yaml');
 
 const localRulesTarget = path.join(targetDir, 'rules.local.yaml');

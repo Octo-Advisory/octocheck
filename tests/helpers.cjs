@@ -8,18 +8,25 @@ const { EventEmitter } = require('events');
 
 const HOOK = 'block-credentials-read.cjs';
 
-/** A fake octocheck_connector. accounts: { "KEY:SECRET": { user, mode } } */
+/** A fake octocheck_connector. accounts: { "KEY:SECRET": { user, mode } }.
+ *  With options.site (a model from site-model.cjs) it also serves get_manifest and
+ *  get_review_bundle. Other options: pageSize, rate { endpoint, times, retryAfter },
+ *  fail { endpoint, status, times }, tamper { manifest(m), bundle(b) }. */
 function startConnector(options = {}) {
   const accounts = options.accounts || { 'goodkey1234:goodsecret99': { user: 'dev@example.com', mode: 'developer' } };
   const calls = [];
+  const state = { rate: options.rate ? { ...options.rate } : null, fail: options.fail ? { ...options.fail } : null };
+  const prefix = '/api/method/octocheck_connector.api.';
   const server = http.createServer((req, res) => {
-    calls.push({ url: req.url, auth: req.headers.authorization || null });
+    const u = new URL(req.url, 'http://localhost');
+    const endpoint = u.pathname.startsWith(prefix) ? u.pathname.slice(prefix.length) : null;
+    calls.push({ url: req.url, endpoint, auth: req.headers.authorization || null, query: u.searchParams.get('scripts') });
     const send = (status, body, headers = {}) => {
       res.writeHead(status, { 'Content-Type': 'application/json', ...headers });
       res.end(typeof body === 'string' ? body : JSON.stringify(body));
     };
     if (options.redirectTo) return send(302, {}, { Location: options.redirectTo });
-    if (req.url !== '/api/method/octocheck_connector.api.get_info') return send(404, { exc_type: 'NotFound' });
+    if (!endpoint || !['get_info', 'get_manifest', 'get_review_bundle'].includes(endpoint)) return send(404, { exc_type: 'NotFound' });
     if (options.status) return send(options.status, options.body || {});
     const token = (req.headers.authorization || '').replace(/^token /, '');
     const account = accounts[token];
@@ -30,17 +37,43 @@ function startConnector(options = {}) {
         _server_messages: JSON.stringify([JSON.stringify({ message: 'The OctoCheck connector is disabled. Enable it in OctoCheck Settings.' })]),
       });
     }
-    return send(200, {
-      message: {
-        bundle_version: options.bundleVersion || 1, connector_version: '0.1.0', site: 'test.localhost',
-        frappe_version: '15.0.0', user: account.user, access_mode: account.mode,
-        counts: { 'Server Script': 7, 'Client Script': 1 },
-      },
-    });
+    if (state.rate && state.rate.endpoint === endpoint && state.rate.times > 0) {
+      state.rate.times -= 1;
+      return send(429, {}, state.rate.retryAfter ? { 'Retry-After': String(state.rate.retryAfter) } : {});
+    }
+    if (state.fail && state.fail.endpoint === endpoint && (state.fail.times === undefined || state.fail.times > 0)) {
+      if (state.fail.times !== undefined) state.fail.times -= 1;
+      return send(state.fail.status || 500, { exception: 'frappe.exceptions.ValidationError: it broke' });
+    }
+    const tamper = options.tamper || {};
+    if (endpoint === 'get_info') {
+      return send(200, {
+        message: {
+          bundle_version: options.bundleVersion || 1, connector_version: '0.1.0', site: 'test.localhost',
+          frappe_version: '15.0.0', user: account.user, access_mode: account.mode, page_size: options.pageSize || 25,
+          counts: { 'Server Script': 7, 'Client Script': 1 },
+        },
+      });
+    }
+    if (!options.site) return send(404, { exc_type: 'NotFound' });
+    if (endpoint === 'get_manifest') {
+      const m = options.site.manifest();
+      m.user = account.user;
+      m.access_mode = account.mode;
+      return send(200, { message: tamper.manifest ? tamper.manifest(m) || m : m });
+    }
+    const b = options.site.bundle(JSON.parse(u.searchParams.get('scripts') || '[]'));
+    b.user = account.user;
+    b.access_mode = account.mode;
+    return send(200, { message: tamper.bundle ? tamper.bundle(b) || b : b });
   });
   return new Promise((resolve) => {
     server.listen(0, '127.0.0.1', () => {
-      resolve({ url: `http://127.0.0.1:${server.address().port}`, calls, close: () => new Promise((r) => server.close(r)) });
+      resolve({
+        url: `http://127.0.0.1:${server.address().port}`, calls,
+        callsTo: (endpoint) => calls.filter((c) => c.endpoint === endpoint),
+        close: () => new Promise((r) => server.close(r)),
+      });
     });
   });
 }

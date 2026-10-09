@@ -10,6 +10,7 @@
 //   node .claude/scripts/octocheck-site.cjs rotate --site <name> [--profile developer|bot]
 //   node .claude/scripts/octocheck-site.cjs check  --site <name> [--profile developer|bot]
 //   node .claude/scripts/octocheck-site.cjs list
+//   node .claude/scripts/octocheck-site.cjs fetch  --site <name> [--profile developer|bot] [--blast-radius <n|off>]
 //
 // `setup` and `rotate` ask for the key and secret with a hidden prompt, so run them in a
 // normal terminal, NOT inside Claude Code. No dependencies; works on Node 16 and later.
@@ -21,7 +22,7 @@ const http = require('http');
 const https = require('https');
 
 const SUPPORTED_BUNDLE_VERSION = 1;
-const GET_INFO_PATH = '/api/method/octocheck_connector.api.get_info';
+const API_PREFIX = '/api/method/octocheck_connector.api.';
 const CRED_FILE = 'octocheck-credentials.json';
 const SITES_FILE = 'octocheck.sites.json';
 const CREDENTIAL_GUARD_HOOK = 'block-credentials-read.cjs';
@@ -151,18 +152,37 @@ function networkMessage(e, origin) {
   return `Could not reach ${origin}: ${e && e.message ? e.message : 'unknown error'}`;
 }
 
-/** Call get_info and return its payload, or throw a UserError that says what to do. */
-async function getInfo(origin, key, secret, httpGetFn = httpGet) {
-  let res;
-  try {
-    res = await httpGetFn(
-      origin + GET_INFO_PATH,
-      { Authorization: `token ${key}:${secret}`, Accept: 'application/json', 'User-Agent': USER_AGENT },
-      REQUEST_TIMEOUT_MS
-    );
-  } catch (e) {
-    throw new UserError(networkMessage(e, origin));
+/** Call one connector endpoint and return the `message` part of the answer, or throw a
+ *  UserError that says what to do. `query` becomes URL parameters. With opts.retries, a 429
+ *  waits and tries again (used by fetch, which makes many calls; setup never waits). */
+async function callEndpoint(origin, endpoint, query, key, secret, opts = {}) {
+  const doGet = opts.httpGet || httpGet;
+  const timeoutMs = opts.timeoutMs || REQUEST_TIMEOUT_MS;
+  const sleep = opts.sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
+  let url = `${origin}${API_PREFIX}${endpoint}`;
+  const params = new URLSearchParams(query || {}).toString();
+  if (params) url += `?${params}`;
+  const headers = { Authorization: `token ${key}:${secret}`, Accept: 'application/json', 'User-Agent': USER_AGENT };
+
+  for (let attempt = 0; ; attempt += 1) {
+    let res;
+    try {
+      res = await doGet(url, headers, timeoutMs);
+    } catch (e) {
+      throw new UserError(networkMessage(e, origin));
+    }
+    if (res.status === 429 && attempt < (opts.retries || 0)) {
+      const header = Number(res.headers && res.headers['retry-after']);
+      const seconds = Number.isFinite(header) && header > 0 && header <= 120 ? header : 61;
+      if (opts.onWait) opts.onWait(seconds);
+      await sleep(seconds * 1000);
+      continue;
+    }
+    return interpret(res, origin);
   }
+}
+
+function interpret(res, origin) {
   const detail = serverMessage(res.body);
   if (res.status >= 300 && res.status < 400) {
     // Never follow a redirect: it could carry the secret to another host.
@@ -188,13 +208,22 @@ async function getInfo(origin, key, secret, httpGetFn = httpGet) {
   if (res.status !== 200) {
     throw new UserError(`The site answered with an error (${res.status}).${detail ? ` ${detail}` : ''}`);
   }
-  let info;
+  let message;
   try {
-    info = JSON.parse(res.body).message;
+    message = JSON.parse(res.body).message;
   } catch (e) {
-    info = null;
+    message = undefined;
   }
-  if (!info || typeof info !== 'object' || !('bundle_version' in info) || !('access_mode' in info) || !info.user) {
+  if (!message || typeof message !== 'object') {
+    throw new UserError('The answer did not look like the OctoCheck connector. Is this the right site?');
+  }
+  return message;
+}
+
+/** Call get_info and return its payload, or throw a UserError that says what to do. */
+async function getInfo(origin, key, secret, httpGetFn = httpGet, opts = {}) {
+  const info = await callEndpoint(origin, 'get_info', {}, key, secret, { ...opts, httpGet: httpGetFn });
+  if (!('bundle_version' in info) || !('access_mode' in info) || !info.user) {
     throw new UserError('The answer did not look like the OctoCheck connector. Is this the right site?');
   }
   if (info.bundle_version !== SUPPORTED_BUNDLE_VERSION) {
@@ -514,11 +543,14 @@ const USAGE = `OctoCheck site script
   rotate --site <name> [--profile developer|bot]                     replace a saved key (hidden prompt)
   check  --site <name> [--profile developer|bot]                     test the saved key
   list                                                               show configured sites (no secrets)
+  fetch  --site <name> [--profile developer|bot] [--blast-radius <n|off>]
+                                                                     get the scripts that need review
+                                                                     (see octocheck-fetch.cjs)
 
 Run setup and rotate in a normal terminal, not inside Claude Code.`;
 
 const FLAGS = {
-  site: true, profile: true, url: true, 'skip-hook-check': false, 'allow-insecure-http': false, help: false,
+  site: true, profile: true, url: true, 'blast-radius': true, 'skip-hook-check': false, 'allow-insecure-http': false, help: false,
 };
 
 function parseArgs(argv) {
@@ -555,6 +587,7 @@ async function main(argv, ctxOverrides = {}) {
     if (command === 'setup' || command === 'rotate') await runSetup(command, flags, ctx);
     else if (command === 'check') await runCheck(flags, ctx);
     else if (command === 'list') runList(ctx);
+    else if (command === 'fetch') await require('./octocheck-fetch.cjs').runFetch(flags, ctx);
     else throw new UserError(`Unknown command: ${command}\n\n${USAGE}`);
     return 0;
   } catch (e) {
@@ -569,9 +602,9 @@ async function main(argv, ctxOverrides = {}) {
 }
 
 module.exports = {
-  main, parseArgs, mask, checkUrl, isLocalHost, getInfo, serverMessage, promptHidden, readStore, writeStore,
+  main, parseArgs, mask, checkUrl, isLocalHost, getInfo, callEndpoint, httpGet, serverMessage, promptHidden, readStore, writeStore,
   readSites, loadCredentials, hookRegistered, checkStoragePlace, credentialsDir, UserError,
-  CRED_FILE, SITES_FILE, CREDENTIAL_GUARD_HOOK,
+  CRED_FILE, SITES_FILE, CREDENTIAL_GUARD_HOOK, PROFILES, SUPPORTED_BUNDLE_VERSION, checkSiteName, checkProfileName,
 };
 
 if (require.main === module) {

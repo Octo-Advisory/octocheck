@@ -1,0 +1,262 @@
+{
+  "$comment": "Shape of what the connector returns (the 'message' part of the Frappe response). Checked by the connector's tests and, later, by the OctoCheck runner. review_bundle is what get_review_bundle returns (increment 3).",
+  "title": "OctoCheck connector bundle schema",
+  "bundle_version": 1,
+  "$defs": {
+    "info": {
+      "type": "object",
+      "required": [
+        "bundle_version", "connector_version", "site", "frappe_version", "apps",
+        "user", "access_mode", "exposed_types", "excluded_modules", "page_size",
+        "counts", "server_time"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "bundle_version": {"const": 1},
+        "connector_version": {"type": "string"},
+        "site": {"type": "string"},
+        "frappe_version": {"type": "string"},
+        "apps": {"type": "object", "additionalProperties": {"type": ["string", "null"]}},
+        "user": {"type": "string"},
+        "access_mode": {"enum": ["developer", "reviewer"]},
+        "exposed_types": {"type": "array", "items": {"enum": ["Server Script", "Client Script"]}},
+        "excluded_modules": {"type": "array", "items": {"type": "string"}},
+        "page_size": {"type": "integer"},
+        "counts": {
+          "type": "object",
+          "required": ["Server Script", "Client Script"],
+          "additionalProperties": false,
+          "properties": {
+            "Server Script": {"type": "integer"},
+            "Client Script": {"type": "integer"}
+          }
+        },
+        "server_time": {"type": "string"}
+      }
+    },
+    "script_entry": {
+      "type": "object",
+      "required": [
+        "name", "doctype", "script_type", "reference_doctype", "doctype_event",
+        "event_frequency", "cron_format", "api_method", "allow_guest", "apply_to",
+        "enabled", "module", "modified", "hash"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string"},
+        "doctype": {"enum": ["Server Script", "Client Script"]},
+        "script_type": {"type": ["string", "null"]},
+        "reference_doctype": {"type": ["string", "null"]},
+        "doctype_event": {"type": ["string", "null"]},
+        "event_frequency": {"type": ["string", "null"]},
+        "cron_format": {"type": ["string", "null"]},
+        "api_method": {"type": ["string", "null"]},
+        "allow_guest": {"type": "boolean"},
+        "apply_to": {"type": ["string", "null"]},
+        "enabled": {"type": "boolean"},
+        "module": {"type": ["string", "null"]},
+        "modified": {"type": "string"},
+        "hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "manifest": {
+      "type": "object",
+      "required": ["bundle_version", "generated_at", "user", "access_mode", "count", "scripts"],
+      "additionalProperties": false,
+      "properties": {
+        "bundle_version": {"const": 1},
+        "generated_at": {"type": "string"},
+        "user": {"type": "string"},
+        "access_mode": {"enum": ["developer", "reviewer"]},
+        "count": {"type": "integer"},
+        "scripts": {"type": "array", "items": {"$ref": "#/$defs/script_entry"}}
+      }
+    },
+    "link": {
+      "type": "object",
+      "required": ["doctype", "name", "enabled", "kind", "direction", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "doctype": {"enum": ["Server Script", "Client Script"]},
+        "name": {"type": "string"},
+        "enabled": {"type": "boolean"},
+        "kind": {"enum": ["same_field", "same_event", "calls_api", "saves_doc"]},
+        "direction": {"enum": ["both", "outgoing", "incoming"]},
+        "reason": {"type": "string"}
+      }
+    },
+    "unknown_link": {
+      "type": "object",
+      "required": ["kind", "via", "line", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {"enum": ["calls_api", "saves_doc"]},
+        "via": {"type": ["string", "null"]},
+        "line": {"type": "integer"},
+        "reason": {"type": "string"}
+      }
+    },
+    "external_call": {
+      "type": "object",
+      "required": ["method", "app", "via", "line"],
+      "additionalProperties": false,
+      "properties": {
+        "method": {"type": "string"},
+        "app": {"type": ["string", "null"]},
+        "via": {"type": "string"},
+        "line": {"type": "integer"}
+      }
+    },
+    "bundle_script": {
+      "type": "object",
+      "required": [
+        "name", "doctype", "script_type", "reference_doctype", "doctype_event",
+        "event_frequency", "cron_format", "api_method", "allow_guest", "apply_to",
+        "enabled", "module", "modified", "hash",
+        "language", "script", "fields_used", "links", "unknown_links", "external_calls"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string"},
+        "doctype": {"enum": ["Server Script", "Client Script"]},
+        "script_type": {"type": ["string", "null"]},
+        "reference_doctype": {"type": ["string", "null"]},
+        "doctype_event": {"type": ["string", "null"]},
+        "event_frequency": {"type": ["string", "null"]},
+        "cron_format": {"type": ["string", "null"]},
+        "api_method": {"type": ["string", "null"]},
+        "allow_guest": {"type": "boolean"},
+        "apply_to": {"type": ["string", "null"]},
+        "enabled": {"type": "boolean"},
+        "module": {"type": ["string", "null"]},
+        "modified": {"type": "string"},
+        "hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "language": {"enum": ["python", "javascript"]},
+        "script": {"type": "string"},
+        "fields_used": {"type": "array", "items": {"type": "string"}},
+        "links": {"type": "array", "items": {"$ref": "#/$defs/link"}},
+        "unknown_links": {"type": "array", "items": {"$ref": "#/$defs/unknown_link"}},
+        "external_calls": {"type": "array", "items": {"$ref": "#/$defs/external_call"}}
+      }
+    },
+    "field": {
+      "type": "object",
+      "required": ["fieldname", "fieldtype", "label", "options", "reqd", "read_only", "is_custom"],
+      "additionalProperties": false,
+      "properties": {
+        "fieldname": {"type": "string"},
+        "fieldtype": {"type": "string"},
+        "label": {"type": ["string", "null"]},
+        "options": {"type": ["string", "null"]},
+        "reqd": {"type": "boolean"},
+        "read_only": {"type": "boolean"},
+        "is_custom": {"type": "boolean"}
+      }
+    },
+    "doctype_context": {
+      "type": "object",
+      "required": [
+        "exists", "is_submittable", "is_child_table", "fields", "child_tables", "standard_fields",
+        "app_doc_events", "workflows", "notifications", "scripts"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "exists": {"type": "boolean"},
+        "is_submittable": {"type": "boolean"},
+        "is_child_table": {"type": "boolean"},
+        "fields": {"type": "array", "items": {"$ref": "#/$defs/field"}},
+        "child_tables": {
+          "type": "object",
+          "additionalProperties": {"type": "array", "items": {"$ref": "#/$defs/field"}}
+        },
+        "standard_fields": {"type": "array", "items": {"type": "string"}},
+        "app_doc_events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["event", "method", "scope"],
+            "additionalProperties": false,
+            "properties": {
+              "event": {"type": "string"},
+              "method": {"type": "string"},
+              "scope": {"enum": ["doctype", "all"]}
+            }
+          }
+        },
+        "workflows": {
+          "type": "array",
+          "items": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}}
+        },
+        "notifications": {
+          "type": "array",
+          "items": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}}
+        },
+        "scripts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["doctype", "name", "script_type", "doctype_event", "apply_to", "enabled"],
+            "additionalProperties": false,
+            "properties": {
+              "doctype": {"enum": ["Server Script", "Client Script"]},
+              "name": {"type": "string"},
+              "script_type": {"type": ["string", "null"]},
+              "doctype_event": {"type": ["string", "null"]},
+              "apply_to": {"type": ["string", "null"]},
+              "enabled": {"type": "boolean"}
+            }
+          }
+        }
+      }
+    },
+    "review_bundle": {
+      "type": "object",
+      "required": [
+        "bundle_version", "generated_at", "user", "access_mode", "requested",
+        "scripts", "not_found", "doctypes", "site"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "bundle_version": {"const": 1},
+        "generated_at": {"type": "string"},
+        "user": {"type": "string"},
+        "access_mode": {"enum": ["developer", "reviewer"]},
+        "requested": {"type": "integer"},
+        "scripts": {"type": "array", "items": {"$ref": "#/$defs/bundle_script"}},
+        "not_found": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["doctype", "name"],
+            "additionalProperties": false,
+            "properties": {"doctype": {"type": "string"}, "name": {"type": "string"}}
+          }
+        },
+        "doctypes": {"type": "object", "additionalProperties": {"$ref": "#/$defs/doctype_context"}},
+        "site": {
+          "type": "object",
+          "required": ["frappe_version", "apps", "api_scripts"],
+          "additionalProperties": false,
+          "properties": {
+            "frappe_version": {"type": "string"},
+            "apps": {"type": "object", "additionalProperties": {"type": ["string", "null"]}},
+            "api_scripts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["name", "api_method", "allow_guest", "enabled"],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {"type": "string"},
+                  "api_method": {"type": ["string", "null"]},
+                  "allow_guest": {"type": "boolean"},
+                  "enabled": {"type": "boolean"}
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
