@@ -104,7 +104,12 @@ node .claude/scripts/octocheck-site.cjs list                    # sites and prof
 ```
 
 **Fetching what needs review.** `fetch` asks the site what scripts it has and works out which ones
-need a review. It makes the HTTP calls itself and spends no tokens:
+need a review: scripts that are new, that changed since their last review, whose last review is
+older than `review_expiry_days`, or that were last reviewed under **other rules** (every saved review
+records the version of `rules/rules.ui-scripts.yaml`, plus a fingerprint of your own team rules, that
+it was done under). So when the rules change, bump the `# version:` line in that file: every script
+is then reviewed once under the new rules, instead of keeping results from the old ones. Disabling a
+rule does not trigger this. It makes the HTTP calls itself and spends no tokens:
 
 ```bash
 node .claude/scripts/octocheck-site.cjs fetch --site my-site                 # your own key

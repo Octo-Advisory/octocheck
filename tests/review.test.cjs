@@ -6,12 +6,14 @@ const site = require('../.claude/scripts/octocheck-site.cjs');
 const fetchMod = require('../.claude/scripts/octocheck-fetch.cjs');
 const { startConnector, makeWorld, makeIo } = require('./helpers.cjs');
 const { SiteModel, FixtureSite } = require('./site-model.cjs');
+const { loadRules } = require('../.claude/scripts/octocheck-rules.cjs');
 
 const SITE = 'octo-test';
 const NOW = new Date(2026, 9, 9, 8, 0, 5); // local time: the saved dates are the same in any time zone
 const LATER = new Date(2026, 9, 9, 9, 30, 0);
 const ACCOUNTS = { 'goodkey1234:goodsecret99': { user: 'dev@example.com', mode: 'developer' } };
 const ROOT = path.join(__dirname, '..');
+const RULES_ID = loadRules(ROOT).summary.id;
 
 // --- scaffolding ----------------------------------------------------------------
 
@@ -65,7 +67,7 @@ async function setup(model) {
 const writeEntry = (t, doctype, name, fields) => {
   const dir = path.join(t.stateDir, 'entries');
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, `${fetchMod.slugOf(doctype, name)}.json`), JSON.stringify({ doctype, name, h: null, rev: '2026-10-01', flags: [], ...fields }));
+  fs.writeFileSync(path.join(dir, `${fetchMod.slugOf(doctype, name)}.json`), JSON.stringify({ doctype, name, h: null, rev: '2026-10-01', rv: RULES_ID, flags: [], ...fields }));
 };
 
 const T3 = 'OC Test 3 Query In Loop';
@@ -176,7 +178,7 @@ module.exports = [
     assert.ok(r.text.includes('Next: Task 2: DocType Event: ToDo / Before Save'), r.text);
     const hash = t.plan().review.find((x) => x.name === T3).hash;
     assert.deepStrictEqual(t.entry(slug), {
-      doctype: 'Server Script', name: T3, h: hash, en: true, rev: '2026-10-09', del: false,
+      doctype: 'Server Script', name: T3, h: hash, en: true, rev: '2026-10-09', rv: RULES_ID, del: false,
       flags: [{ l: null, r: 'UI-01', s: 'low', f: 1, n: 'no header comment' }, { l: 3, r: 'UI-24', s: 'medium', f: 7, n: 'query runs once per row' }],
     });
     const task = t.progress().tasks[0];
@@ -407,5 +409,80 @@ module.exports = [
     const text = fs.readFileSync(path.join(ROOT, '.claude', 'scripts', 'octocheck-site.cjs'), 'utf8');
     assert.ok(text.includes('next   --site <name>') && text.includes('record --site <name> --task <n> [--file <path>]'));
     assert.deepStrictEqual(site.parseArgs(['record', '--site', 'x', '--task', '3']).flags, { site: 'x', task: '3' });
+  }],
+
+  // --- a change to the rules re-reviews every script ----------------------------------------
+  ['fetch queues a script again when it was reviewed under other rules, and says why', async () => {
+    const model = new SiteModel();
+    model.add('Solo', { dt: 'ToDo', event: 'Before Save', text: 'x = 1\n' });
+    const t = await setup(model);
+    await t.fetch();
+    const h = model.manifest().scripts[0].hash;
+    const slug = fetchMod.slugOf('Server Script', 'Solo');
+    const statusOf = async (fields) => {
+      writeEntry(t, 'Server Script', 'Solo', { h, en: true, ...fields });
+      const r = await t.fetch(LATER);
+      return { r, item: t.plan().review.find((x) => x.name === 'Solo') };
+    };
+    let { r, item } = await statusOf({ rv: undefined });
+    assert.deepStrictEqual([item.status, item.reason], ['expired', 'reviewed before the rules version was recorded, the rules are now 0.2.0-draft']);
+    assert.ok(r.text.includes('1 script was last reviewed under older rules, so it is queued again (rules now 0.2.0-draft).'), r.text);
+    ({ item } = await statusOf({ rv: '0.1.0-draft' }));
+    assert.deepStrictEqual([item.status, item.reason], ['expired', 'reviewed under rules 0.1.0-draft, the rules are now 0.2.0-draft']);
+    ({ r, item } = await statusOf({ rv: RULES_ID }));
+    assert.strictEqual(item, undefined, 'reviewed under the current rules: nothing to do');
+    assert.ok(!r.text.includes('older rules'), r.text);
+    assert.strictEqual(t.plan().rules_id, RULES_ID);
+    ({ item } = await statusOf({ rv: '0.1.0-draft', h: 'sha256:edited-since' }));
+    assert.strictEqual(item.status, 'changed', 'an edited script is "changed" whatever rules it was reviewed under');
+    assert.ok(fs.existsSync(path.join(t.stateDir, 'entries', `${slug}.json`)));
+    await t.done();
+  }],
+  ['a project without the site rules installed still fetches, with no rules check', async () => {
+    const model = new SiteModel();
+    model.add('Solo', { dt: 'ToDo', event: 'Before Save' });
+    const t = await setup(model);
+    fs.rmSync(path.join(t.w.cwd, 'rules'), { recursive: true });
+    await t.fetch();
+    writeEntry(t, 'Server Script', 'Solo', { h: model.manifest().scripts[0].hash, rv: undefined });
+    await t.fetch(LATER);
+    assert.strictEqual(t.plan().rules_id, null);
+    assert.strictEqual(t.plan().review.length, 0);
+    await t.done();
+  }],
+  ['next and record refuse when the rules changed after the plan was approved', async () => {
+    const t = await setup(new FixtureSite());
+    await t.ready();
+    t.fill(1);
+    const rulesFile = path.join(t.w.cwd, 'rules', 'rules.ui-scripts.yaml');
+    fs.writeFileSync(rulesFile, fs.readFileSync(rulesFile, 'utf8').replace('# version: 0.2.0-draft', '# version: 0.3.0-draft'));
+    for (const r of [await t.next(), await t.record(1)]) {
+      assert.strictEqual(r.code, 1);
+      assert.ok(r.text.includes('The rules changed after this plan was approved (0.2.0-draft to 0.3.0-draft). Run /octocheck-init --site octo-test again.'), r.text);
+    }
+    assert.strictEqual(t.entryFiles().length, 0, 'nothing was saved under rules the user did not see');
+    await t.done();
+  }],
+  ['a rules change sends every reviewed script back for review once, and the new entries record the new rules', async () => {
+    const t = await setup(new FixtureSite());
+    await t.ready();
+    for (let id = 1; id <= 5; id += 1) { t.fill(id); assert.strictEqual((await t.record(id)).code, 0); }
+    for (const f of t.entryFiles()) assert.strictEqual(JSON.parse(fs.readFileSync(path.join(t.stateDir, 'entries', f), 'utf8')).rv, '0.2.0-draft');
+    await t.fetch(LATER);
+    assert.deepStrictEqual([t.plan().counts.unchanged, t.plan().review.length], [8, 0], 'same rules: nothing to do');
+
+    const rulesFile = path.join(t.w.cwd, 'rules', 'rules.ui-scripts.yaml');
+    fs.writeFileSync(rulesFile, fs.readFileSync(rulesFile, 'utf8').replace('# version: 0.2.0-draft', '# version: 0.3.0-draft'));
+    const r = await t.fetch(new Date(2026, 9, 9, 11, 0, 0));
+    assert.deepStrictEqual([t.plan().counts.expired, t.plan().counts.unchanged, t.plan().review.length], [8, 0, 8]);
+    assert.ok(t.plan().review.every((x) => x.reason === 'reviewed under rules 0.2.0-draft, the rules are now 0.3.0-draft'));
+    assert.ok(r.text.includes('8 scripts were last reviewed under older rules'), r.text);
+    await t.tasks();
+    assert.strictEqual(t.progress().counts.review_scripts, 8);
+    assert.strictEqual((await t.tasks(['--approve'])).code, 0);
+    t.fill(1);
+    assert.strictEqual((await t.record(1)).code, 0);
+    assert.strictEqual(t.entry(t.slug(1, T3)).rv, '0.3.0-draft');
+    await t.done();
   }],
 ];

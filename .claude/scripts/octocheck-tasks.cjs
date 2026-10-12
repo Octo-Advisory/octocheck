@@ -24,7 +24,7 @@
 const fs = require('fs');
 const path = require('path');
 const site = require('./octocheck-site.cjs');
-const { parseRules, RulesError } = require('./octocheck-rules.cjs');
+const { loadRules } = require('./octocheck-rules.cjs');
 const { readLimit, stateDirFor, clean } = require('./octocheck-fetch.cjs');
 
 const { UserError } = site;
@@ -95,49 +95,6 @@ function chunkInto(items, metaOf, cap, type, makeRow) {
     }
   }
   return tasks;
-}
-
-const UI_RULES_FILE = 'rules/rules.ui-scripts.yaml';
-
-/**
- * Which rules this project will use: the UI rules, minus any the project disabled in
- * rules.local.yaml, plus any team rules it added for the ui-script stack. A disabled rule is
- * listed, never silently dropped. Team rules may not reuse the reserved factors (1-7 and C).
- * Returns { summary, active }: the summary goes into progress.json, `active` is the list of
- * rules in force (the review checks results against it).
- */
-function loadRules(cwd) {
-  const read = (file) => { try { return fs.readFileSync(path.join(cwd, file), 'utf8'); } catch (e) { return null; } };
-  const parse = (file, text) => {
-    try { return parseRules(text); } catch (e) {
-      if (e instanceof RulesError) throw new UserError(`${file}: ${e.message}`);
-      throw e;
-    }
-  };
-  const coreText = read(UI_RULES_FILE);
-  if (coreText === null) throw new UserError(`${UI_RULES_FILE} is missing. Install OctoCheck again.`);
-  const core = parse(UI_RULES_FILE, coreText);
-  const ids = new Set(core.rules.map((r) => r.id));
-  const out = { file: UI_RULES_FILE, version: core.version, review_rules: 0, contract_checks: 0, disabled: [], team_added: [], team_discarded: [] };
-  const teamRules = [];
-  const localText = read('rules.local.yaml');
-  if (localText !== null) {
-    for (const r of parse('rules.local.yaml', localText).rules) {
-      if (r.disabled === true) {
-        if (ids.has(r.id)) out.disabled.push(r.id);
-      } else if (r.stack === 'ui-script') {
-        const reserved = r.factor === 'C' || (Number.isInteger(r.factor) && r.factor >= 1 && r.factor <= 7);
-        if (reserved) { out.team_discarded.push(r.id); } else { out.team_added.push(r.id); teamRules.push(r); }
-      }
-    }
-  }
-  const active = core.rules.filter((r) => !out.disabled.includes(r.id)).concat(teamRules);
-  for (const r of core.rules) {
-    if (out.disabled.includes(r.id)) continue;
-    if (r.factor === 'C') out.contract_checks += 1; else out.review_rules += 1;
-  }
-  out.team_rules = out.team_added.length;
-  return { summary: out, active };
 }
 
 function readRuleSet(cwd) {
@@ -219,6 +176,9 @@ async function runTasks(flags, ctx) {
   const manifest = readRequired(path.join(stateDir, 'manifest.json'), 'manifest.json');
   if (plan.plan_version !== 1) throw new UserError(`plan.json is version ${plan.plan_version}; this OctoCheck understands version 1. Update OctoCheck or run fetch again.`);
   const rules = readRuleSet(cwd);
+  if (plan.rules_id !== rules.id) {
+    throw new UserError(`The rules changed since the last fetch (${plan.rules_id || 'none recorded'} to ${rules.id}), so which scripts need review may be out of date. Run fetch again, then tasks.`);
+  }
   const progress = buildProgress({ plan, manifest, cap: readGroupCap(cwd), now: ctx.now ? ctx.now() : new Date(), rules });
   fs.writeFileSync(path.join(stateDir, 'progress.json'), `${JSON.stringify(progress, null, 2)}\n`);
 

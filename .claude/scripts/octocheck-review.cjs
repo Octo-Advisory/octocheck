@@ -25,7 +25,8 @@ const fs = require('fs');
 const path = require('path');
 const site = require('./octocheck-site.cjs');
 const { clean, stateDirFor } = require('./octocheck-fetch.cjs');
-const { loadRules, readRequired } = require('./octocheck-tasks.cjs');
+const { readRequired } = require('./octocheck-tasks.cjs');
+const { loadRules } = require('./octocheck-rules.cjs');
 
 const { UserError } = site;
 const MAX_FLAGS_PER_SCRIPT = 40;
@@ -51,6 +52,10 @@ function loadState(flags, ctx) {
   if (progress.approved !== true) throw new UserError(`This plan has not been approved. Run /octocheck-init --site ${flags.site} and answer yes first.`);
   if (progress.plan_fetched_at !== plan.fetched_at) {
     throw new UserError(`The site was fetched again after this plan was approved, so the plan is out of date. Run /octocheck-init --site ${flags.site} again.`);
+  }
+  const rulesNow = loadRules(cwd).summary.id;
+  if (!progress.rules || progress.rules.id !== rulesNow) {
+    throw new UserError(`The rules changed after this plan was approved (${progress.rules && progress.rules.id ? progress.rules.id : 'none recorded'} to ${rulesNow}). Run /octocheck-init --site ${flags.site} again.`);
   }
   return { stateDir, plan, progress };
 }
@@ -246,7 +251,7 @@ function runRecord(flags, ctx) {
     if (task.type === 'review') {
       const kept = old ? old.flags.filter(isContractFlag) : [];
       if (kept.length) notes.push(`${clean(s.name)}: kept ${plural(kept.length, 'earlier contract flag')}; a contract check on the same trigger replaces them.`);
-      entry = { doctype: s.doctype, name: s.name, h: s.hash, en: s.enabled, rev: today, flags: item.flags.map(stripExtras).concat(kept), del: false };
+      entry = { doctype: s.doctype, name: s.name, h: s.hash, en: s.enabled, rev: today, rv: progress.rules.id, flags: item.flags.map(stripExtras).concat(kept), del: false };
     } else {
       if (!old) throw new UserError(`${clean(s.name)} has no saved review entry, so a contract check has nothing to update. Run fetch again.`);
       const rechecked = new Set((s.because || []).map((b) => b.slug));

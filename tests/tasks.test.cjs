@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const site = require('../.claude/scripts/octocheck-site.cjs');
 const { buildProgress, groupOf, readGroupCap, stamp } = require('../.claude/scripts/octocheck-tasks.cjs');
-const { parseRules, RulesError } = require('../.claude/scripts/octocheck-rules.cjs');
+const { parseRules, RulesError, loadRules } = require('../.claude/scripts/octocheck-rules.cjs');
 const { startConnector, makeWorld, makeIo } = require('./helpers.cjs');
 const { SiteModel, FixtureSite } = require('./site-model.cjs');
 
@@ -12,6 +12,7 @@ const SITE = 'octo-test';
 const NOW = new Date(2026, 9, 9, 8, 0, 5); // local time, so the file-name stamp is the same in any time zone
 const ACCOUNTS = { 'goodkey1234:goodsecret99': { user: 'dev@example.com', mode: 'developer' } };
 const ROOT = path.join(__dirname, '..');
+const RULES_ID = loadRules(ROOT).summary.id; // the rule set the project folders in these tests use
 
 // --- scaffolding -----------------------------------------------------------
 
@@ -59,12 +60,12 @@ const names = (task) => task.scripts.map((s) => s.name);
 
 module.exports = [
   // --- the rules file ---------------------------------------------------------
-  ['the UI rules file is whole: 26 rules and 4 contract checks, each with every field', () => {
+  ['the UI rules file is whole: 27 rules and 4 contract checks, each with every field', () => {
     const { version, rules } = parseRules(fs.readFileSync(path.join(ROOT, 'rules', 'rules.ui-scripts.yaml'), 'utf8'));
-    assert.strictEqual(version, '0.1.0-draft');
-    assert.strictEqual(rules.length, 30);
+    assert.strictEqual(version, '0.2.0-draft');
+    assert.strictEqual(rules.length, 31);
     assert.strictEqual(rules.filter((r) => r.factor === 'C').length, 4);
-    assert.strictEqual(new Set(rules.map((r) => r.id)).size, 30, 'ids must be unique');
+    assert.strictEqual(new Set(rules.map((r) => r.id)).size, 31, 'ids must be unique');
     for (const r of rules) {
       assert.deepStrictEqual(Object.keys(r).sort(), ['applies', 'description', 'engine', 'factor', 'factor_name', 'id', 'severity', 'stack']);
       assert.strictEqual(r.stack, 'ui-script');
@@ -79,7 +80,7 @@ module.exports = [
     const { rules } = parseRules(fs.readFileSync(path.join(ROOT, 'rules', 'rules.ui-scripts.yaml'), 'utf8'));
     const byFactor = {};
     for (const r of rules) byFactor[r.factor] = (byFactor[r.factor] || 0) + 1;
-    assert.deepStrictEqual(byFactor, { 1: 3, 2: 3, 3: 3, 5: 6, 6: 7, 7: 4, C: 4 });
+    assert.deepStrictEqual(byFactor, { 1: 3, 2: 3, 3: 3, 5: 7, 6: 7, 7: 4, C: 4 });
     assert.ok(!('4' in byFactor));
     assert.ok(!rules.some((r) => r.id === 'UI-10'), 'UI-10 is a report note, not a rule');
     const names = {};
@@ -88,7 +89,7 @@ module.exports = [
   ['severities match the reviewed draft', () => {
     const { rules } = parseRules(fs.readFileSync(path.join(ROOT, 'rules', 'rules.ui-scripts.yaml'), 'utf8'));
     const sev = Object.fromEntries(rules.map((r) => [r.id, r.severity]));
-    for (const id of ['UI-07', 'UI-14', 'UI-15', 'UI-16', 'UI-17', 'UI-18', 'UI-C-01', 'UI-C-02', 'UI-C-03']) assert.strictEqual(sev[id], 'high', id);
+    for (const id of ['UI-07', 'UI-14', 'UI-15', 'UI-16', 'UI-17', 'UI-18', 'UI-28', 'UI-C-01', 'UI-C-02', 'UI-C-03']) assert.strictEqual(sev[id], 'high', id);
     for (const id of ['UI-08', 'UI-09', 'UI-11', 'UI-12', 'UI-13', 'UI-19', 'UI-24', 'UI-C-04']) assert.strictEqual(sev[id], 'medium', id);
     for (const id of ['UI-01', 'UI-04', 'UI-20', 'UI-23', 'UI-25', 'UI-27']) assert.strictEqual(sev[id], 'low', id);
   }],
@@ -227,7 +228,7 @@ module.exports = [
       const dir = path.join(t.stateDir, 'entries');
       fs.mkdirSync(dir, { recursive: true });
       const slug = require('../.claude/scripts/octocheck-fetch.cjs').slugOf(s.doctype, s.name);
-      fs.writeFileSync(path.join(dir, `${slug}.json`), JSON.stringify({ doctype: s.doctype, name: s.name, h: s.hash, rev: '2026-10-09', flags: [] }));
+      fs.writeFileSync(path.join(dir, `${slug}.json`), JSON.stringify({ doctype: s.doctype, name: s.name, h: s.hash, rev: '2026-10-09', rv: RULES_ID, flags: [] }));
     }
     model.edit('Edited Event', 'doc.priority = 9\n');
     await t.fetch();
@@ -251,7 +252,7 @@ module.exports = [
       const dir = path.join(t.stateDir, 'entries');
       fs.mkdirSync(dir, { recursive: true });
       const slug = require('../.claude/scripts/octocheck-fetch.cjs').slugOf(s.doctype, s.name);
-      fs.writeFileSync(path.join(dir, `${slug}.json`), JSON.stringify({ doctype: s.doctype, name: s.name, h: s.hash, rev: '2026-10-09', flags: [] }));
+      fs.writeFileSync(path.join(dir, `${slug}.json`), JSON.stringify({ doctype: s.doctype, name: s.name, h: s.hash, rev: '2026-10-09', rv: RULES_ID, flags: [] }));
     }
     await t.fetch();
     const r = await t.tasks();
@@ -296,9 +297,9 @@ module.exports = [
     const t = await setup(new FixtureSite());
     await t.fetch();
     const r = await t.tasks();
-    assert.ok(r.text.includes('Rules: rules/rules.ui-scripts.yaml v0.1.0-draft: 26 review rules, 4 contract checks, 0 team rules; disabled for this project: none.'), r.text);
+    assert.ok(r.text.includes('Rules: rules/rules.ui-scripts.yaml v0.2.0-draft: 27 review rules, 4 contract checks, 0 team rules; disabled for this project: none.'), r.text);
     assert.deepStrictEqual(t.progress().rules, {
-      file: 'rules/rules.ui-scripts.yaml', version: '0.1.0-draft', review_rules: 26, contract_checks: 4,
+      file: 'rules/rules.ui-scripts.yaml', version: '0.2.0-draft', id: '0.2.0-draft', review_rules: 27, contract_checks: 4,
       disabled: [], team_added: [], team_discarded: [], team_rules: 0,
     });
     await t.done();
@@ -319,7 +320,7 @@ module.exports = [
     assert.strictEqual(r.code, 0, r.text);
     const rules = t.progress().rules;
     assert.deepStrictEqual([rules.disabled, rules.team_added, rules.team_discarded], [['UI-04'], ['UI-8-01'], ['UI-5-99']]);
-    assert.deepStrictEqual([rules.review_rules, rules.contract_checks, rules.team_rules], [25, 4, 1], 'a disabled rule leaves the count; other stacks and other disables are ignored');
+    assert.deepStrictEqual([rules.review_rules, rules.contract_checks, rules.team_rules], [26, 4, 1], 'a disabled rule leaves the count; other stacks and other disables are ignored');
     assert.ok(r.text.includes('1 team rule; disabled for this project: UI-04.'), r.text);
     assert.ok(r.text.includes('Note: team rule UI-5-99 ignored: factors 1-7 and C are reserved for the core rules.'), r.text);
     await t.done();
@@ -404,7 +405,7 @@ module.exports = [
       const dir = path.join(empty.stateDir, 'entries');
       fs.mkdirSync(dir, { recursive: true });
       const slug = require('../.claude/scripts/octocheck-fetch.cjs').slugOf(s.doctype, s.name);
-      fs.writeFileSync(path.join(dir, `${slug}.json`), JSON.stringify({ doctype: s.doctype, name: s.name, h: s.hash, rev: '2026-10-09', flags: [] }));
+      fs.writeFileSync(path.join(dir, `${slug}.json`), JSON.stringify({ doctype: s.doctype, name: s.name, h: s.hash, rev: '2026-10-09', rv: RULES_ID, flags: [] }));
     }
     await empty.fetch(new Date(2026, 9, 9, 8, 5, 0));
     await empty.tasks();
@@ -438,5 +439,50 @@ module.exports = [
   ['the site CLI accepts --approve and documents it', () => {
     assert.strictEqual(site.parseArgs(['tasks', '--site', 'x', '--approve']).flags.approve, true);
     assert.ok(fs.readFileSync(path.join(ROOT, '.claude', 'scripts', 'octocheck-site.cjs'), 'utf8').includes('tasks  --site <name> [--approve]'));
+  }],
+
+  // --- the rule-set id --------------------------------------------------------------
+  ['the rule-set id is the rules version; a team rule adds a fingerprint, disabling a rule does not change it', () => {
+    const w = makeWorld();
+    fs.mkdirSync(path.join(w.cwd, 'rules'), { recursive: true });
+    fs.copyFileSync(path.join(ROOT, 'rules', 'rules.ui-scripts.yaml'), path.join(w.cwd, 'rules', 'rules.ui-scripts.yaml'));
+    const idOf = () => loadRules(w.cwd).summary.id;
+    assert.strictEqual(idOf(), '0.2.0-draft');
+    const team = (text) => `- { id: UI-8-01, stack: ui-script, factor: 8, factor_name: "Team addition", applies: both, description: "${text}", severity: medium, engine: llm }\n`;
+    fs.writeFileSync(path.join(w.cwd, 'rules.local.yaml'), '- { id: UI-04, disabled: true }\n[]\n');
+    assert.strictEqual(idOf(), '0.2.0-draft', 'a review with fewer checks is still a valid review');
+    fs.writeFileSync(path.join(w.cwd, 'rules.local.yaml'), team('Use the shared helper'));
+    const withTeam = idOf();
+    assert.ok(/^0\.2\.0-draft\+team\.[0-9a-f]{8}$/.test(withTeam), withTeam);
+    fs.writeFileSync(path.join(w.cwd, 'rules.local.yaml'), team('Use the shared helper everywhere'));
+    assert.notStrictEqual(idOf(), withTeam, 'a changed team rule changes the id');
+    fs.writeFileSync(path.join(w.cwd, 'rules.local.yaml'), team('Use the shared helper'));
+    assert.strictEqual(idOf(), withTeam, 'the same team rule gives the same id');
+    fs.writeFileSync(path.join(w.cwd, 'rules.local.yaml'), '- { id: UI-5-99, stack: ui-script, factor: 5, factor_name: "x", description: "reserved", severity: low, engine: llm }\n');
+    assert.strictEqual(idOf(), '0.2.0-draft', 'a refused team rule does not change the id');
+    w.cleanup();
+  }],
+  ['a rules file with no version line is refused, and a missing one is only an error when it is required', () => {
+    const w = makeWorld();
+    assert.strictEqual(loadRules(w.cwd, { optional: true }), null);
+    assert.throws(() => loadRules(w.cwd), /rules\/rules\.ui-scripts\.yaml is missing/);
+    fs.mkdirSync(path.join(w.cwd, 'rules'), { recursive: true });
+    fs.writeFileSync(path.join(w.cwd, 'rules', 'rules.ui-scripts.yaml'), '- { id: UI-01, stack: ui-script, factor: 1, severity: low }\n');
+    assert.throws(() => loadRules(w.cwd), /has no "# version:" line/);
+    assert.throws(() => loadRules(w.cwd, { optional: true }), /has no "# version:" line/, 'a damaged file is never ignored');
+    w.cleanup();
+  }],
+  ['tasks refuses when the rules changed after the fetch', async () => {
+    const t = await setup(new FixtureSite());
+    await t.fetch();
+    const rulesFile = path.join(t.w.cwd, 'rules', 'rules.ui-scripts.yaml');
+    fs.writeFileSync(rulesFile, fs.readFileSync(rulesFile, 'utf8').replace('# version: 0.2.0-draft', '# version: 0.3.0-draft'));
+    const r = await t.tasks();
+    assert.strictEqual(r.code, 1);
+    assert.ok(r.text.includes('The rules changed since the last fetch (0.2.0-draft to 0.3.0-draft)'), r.text);
+    assert.ok(!fs.existsSync(path.join(t.stateDir, 'progress.json')));
+    await t.fetch(new Date(2026, 9, 9, 9, 0, 0));
+    assert.strictEqual((await t.tasks()).code, 0, 'after a fresh fetch the new rules are accepted');
+    await t.done();
   }],
 ];

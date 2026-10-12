@@ -24,6 +24,7 @@ const path = require('path');
 const crypto = require('crypto');
 const site = require('./octocheck-site.cjs');
 const { validateNamed } = require('./octocheck-schema.cjs');
+const { loadRules } = require('./octocheck-rules.cjs');
 
 const { UserError } = site;
 const DEFAULT_EXPIRY_DAYS = 19;
@@ -138,8 +139,10 @@ function daysBetween(fromIso, now) {
   return Number.isFinite(from) ? Math.floor((now - from) / 86400000) : Infinity;
 }
 
-/** Label every script and find the removed ones. */
-function classify(scripts, entries, broken, settings, now) {
+/** Label every script and find the removed ones. `rulesId` names the rule set in force; a script
+ *  whose last review was done under another one is queued again (labelled expired, with the reason),
+ *  so a change to the rules is never silently skipped. Null means the site rules are not installed. */
+function classify(scripts, entries, broken, settings, now, rulesId = null) {
   const items = new Map();
   const warnings = [];
   for (const s of scripts) {
@@ -149,6 +152,7 @@ function classify(scripts, entries, broken, settings, now) {
     let status;
     let reason;
     let flipped = false;
+    let rulesChanged = false;
     if (broken.has(slug)) {
       status = 'new';
       reason = 'the saved review entry could not be read';
@@ -160,6 +164,10 @@ function classify(scripts, entries, broken, settings, now) {
       status = 'changed';
       reason = 'changed since its last review';
       flipped = typeof entry.en === 'boolean' && entry.en !== s.enabled;
+    } else if (rulesId && entry.rv !== rulesId) {
+      status = 'expired';
+      reason = entry.rv ? `reviewed under rules ${entry.rv}, the rules are now ${rulesId}` : `reviewed before the rules version was recorded, the rules are now ${rulesId}`;
+      rulesChanged = true;
     } else if (settings.review_expiry_days > 0 && daysBetween(entry.rev, now) > settings.review_expiry_days) {
       status = 'expired';
       reason = `last review is older than ${settings.review_expiry_days} days`;
@@ -167,7 +175,7 @@ function classify(scripts, entries, broken, settings, now) {
       status = 'unchanged';
       reason = 'unchanged since its last review';
     }
-    items.set(key, { key, slug, doctype: s.doctype, name: s.name, enabled: s.enabled, hash: s.hash, status, reason, flipped, entry });
+    items.set(key, { key, slug, doctype: s.doctype, name: s.name, enabled: s.enabled, hash: s.hash, status, reason, flipped, rulesChanged, entry });
   }
   const present = new Set([...items.values()].map((i) => i.slug));
   const removed = [];
@@ -331,7 +339,9 @@ async function runFetch(flags, ctx) {
     const current = new Map(manifest.scripts.map((s) => [keyOf(s.doctype, s.name), s]));
 
     const { entries, broken } = readEntries(stateDir);
-    const { items, removed, warnings } = classify(manifest.scripts, entries, broken, settings, now.getTime());
+    const rules = loadRules(cwd, { optional: true });
+    const rulesId = rules ? rules.summary.id : null;
+    const { items, removed, warnings } = classify(manifest.scripts, entries, broken, settings, now.getTime(), rulesId);
     const needReview = [...items.values()].filter((i) => i.status !== 'unchanged');
     const reviewKeys = needReview.map((i) => i.key);
     const previousRead = readJson(path.join(stateDir, 'manifest.json'));
@@ -425,7 +435,7 @@ async function runFetch(flags, ctx) {
     };
 
     const plan = {
-      plan_version: 1, site: siteName, profile, url: origin, fetched_at: now.toISOString(),
+      plan_version: 1, site: siteName, profile, url: origin, fetched_at: now.toISOString(), rules_id: rulesId,
       connector: { version: info.connector_version, frappe_version: info.frappe_version, user: info.user, access_mode: info.access_mode },
       settings: { review_expiry_days: settings.review_expiry_days, blast_radius_limit: settings.blast_radius_limit, page_size: pageSize },
       counts, review, impacted: impactedOut,
@@ -442,6 +452,8 @@ async function runFetch(flags, ctx) {
     io.out(`${counts.total} scripts on the site: ${counts.new} new, ${counts.changed} changed, ${counts.expired} expired, ${counts.unchanged} unchanged, ${counts.removed} removed.`);
     const names = (list) => list.slice(0, SHOWN_NAMES).map((r) => `  - ${clean(r.name)}${r.status ? ` (${r.status})` : ''}`).concat(list.length > SHOWN_NAMES ? [`  ...and ${list.length - SHOWN_NAMES} more`] : []);
     if (review.length) { io.out(`To review (${review.length}):`); names(review).forEach((l) => io.out(l)); }
+    const underOlderRules = [...items.values()].filter((i) => i.rulesChanged).length;
+    if (underOlderRules) io.out(`${underOlderRules} script${underOlderRules === 1 ? ' was' : 's were'} last reviewed under older rules, so ${underOlderRules === 1 ? 'it is' : 'they are'} queued again (rules now ${rulesId}).`);
     io.out(`Linked scripts to re-check: ${counts.impacted}${counts.impacted_over_limit ? `, plus ${counts.impacted_over_limit} over the limit of ${settings.blast_radius_limit}` : ''}${counts.impacted_disabled ? `, ${counts.impacted_disabled} disabled and skipped` : ''}.`);
     if (impactedOut.length) { names(impactedOut).forEach((l) => io.out(l)); }
     for (const r of removed.slice(0, SHOWN_NAMES)) io.out(`Removed since the last review: ${clean(r.name)}`);

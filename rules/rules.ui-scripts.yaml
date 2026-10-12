@@ -1,10 +1,11 @@
 # OctoCheck UI-script rules: Server Scripts and Client Scripts read from a Frappe site.
-# version: 0.1.0-draft
+# version: 0.2.0-draft
 # DRAFT: written from the team-review document "OctoCheck UI Script Rules". Reviewer changes come back
-# as edits to THIS file only; the review loop itself does not change. Bump the version on every edit.
+# as edits to THIS file only; the review loop itself does not change. Bump the version on every edit:
+# a changed version is what makes OctoCheck review every script again under the new rules.
 # Same format as rules.core.yaml, plus one field:
 #   applies: server | client | both   which kind of script the rule is checked on
-# Rule IDs keep the numbers used in the review document (UI-01 ... UI-27, UI-C-01 ... UI-C-04). They do
+# Rule IDs keep the numbers used in the review document (UI-01 ... UI-28, UI-C-01 ... UI-C-04). They do
 # NOT encode the factor, so the report files each flag under the `factor` field of its rule.
 # Factor 4 (Test cases) has no rules here: tests do not apply to UI scripts. The report states that once.
 # Factor C (Contract impact) is checked only on scripts pulled in as linked neighbours of a changed script.
@@ -29,6 +30,7 @@
 - { id: UI-14, stack: ui-script, factor: 5, factor_name: "Edge cases", applies: server, description: "An API script reads frappe.form_dict input with no validation", severity: high, engine: llm }
 - { id: UI-15, stack: ui-script, factor: 5, factor_name: "Edge cases", applies: server, description: "SQL built with string formatting or concatenation instead of parameters", severity: high, engine: llm }
 - { id: UI-16, stack: ui-script, factor: 5, factor_name: "Edge cases", applies: server, description: "A DocType Event script calls doc.save() on its own document, so it can re-trigger itself", severity: high, engine: llm }
+- { id: UI-28, stack: ui-script, factor: 5, factor_name: "Edge cases", applies: both, description: "Script reads or writes a field that does not exist on the DocType (check the field names against the DocType context)", severity: high, engine: llm }
 
 - { id: UI-17, stack: ui-script, factor: 6, factor_name: "Org standards", applies: server, description: "An API script has Allow Guest on with no clear need or no input checks", severity: high, engine: llm }
 - { id: UI-18, stack: ui-script, factor: 6, factor_name: "Org standards", applies: server, description: "frappe.db.commit() inside a DocType Event script", severity: high, engine: llm }
