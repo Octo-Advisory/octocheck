@@ -559,7 +559,7 @@ const USAGE = `OctoCheck site script
 Run setup and rotate in a normal terminal, not inside Claude Code.`;
 
 const FLAGS = {
-  site: true, profile: true, url: true, 'blast-radius': true, 'skip-hook-check': false, 'allow-insecure-http': false, approve: false, task: true, file: true, help: false,
+  site: true, profile: true, url: true, 'blast-radius': true, 'skip-hook-check': false, 'allow-insecure-http': false, approve: false, only: true, task: true, file: true, help: false,
 };
 
 function parseArgs(argv) {

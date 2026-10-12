@@ -6,10 +6,12 @@
 //   node .claude/scripts/octocheck-site.cjs tasks --site <name>            build the tasks (approved: false)
 //   node .claude/scripts/octocheck-site.cjs tasks --site <name> --approve  record the user's yes
 //
-// Grouping (decisions 7a):
+// Grouping:
 //   Server Script, type DocType Event  -> one group per DocType + event      (ToDo / Before Save)
 //   Client Script                      -> one group per DocType + view       (ToDo / Form)
-//   everything else (API, Scheduler Event, Permission Query, ...) -> one task per script
+//   any other Server Script type (API, Scheduler Event, Permission Query, ...) -> one group per type
+//   anything that cannot be placed (no DocType, event or view recorded) -> one task per script
+//   (API and Scheduler scripts used to be one task each. On a real site with 33 of them that was 33 tasks.)
 // A group with more than `group_size_cap` scripts is split into parts of that size, in script-name
 // order, so the same scripts stay together from one run to the next. The cap counts scripts, not
 // text size. 0 or off switches the cap off.
@@ -17,6 +19,10 @@
 // Scripts that fetch needs fully reviewed become `review` tasks. Their linked neighbours become
 // `contract` tasks (only the contract check, rules with factor C), grouped the same way and placed
 // after every review task.
+//
+// --only server|client builds tasks for one kind of script only. The other kind is left for a later
+// run (nothing is lost: those scripts stay "never reviewed" until a plan includes them). Linked
+// scripts that need a contract check are still included, whatever their kind.
 //
 // Writes <state dir>/progress.json: the task list, the report file name, and `approved: false`.
 // Only this command and the review commands write that file; fetch never does.
@@ -29,9 +35,11 @@ const { readLimit, stateDirFor, clean } = require('./octocheck-fetch.cjs');
 
 const { UserError } = site;
 const DEFAULT_GROUP_CAP = 5;
-const KIND_ORDER = { event: 0, client: 1, single: 2 };
+const KIND_ORDER = { event: 0, client: 1, type: 2, single: 3 };
+const kindOfDoctype = (doctype) => (doctype === 'Client Script' ? 'client' : 'server');
 
 const pad = (n) => String(n).padStart(2, '0');
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 /** Same shape as `date +%Y-%m-%d-%H%M%S` (local time), used in the report file name. */
 function stamp(now) {
@@ -52,6 +60,9 @@ function groupOf(item, meta) {
   }
   if (item.doctype === 'Client Script' && m.reference_doctype && m.apply_to) {
     return { kind: 'client', doctype: m.reference_doctype, view: m.apply_to, label: `Client Script: ${clean(m.reference_doctype)} / ${clean(m.apply_to)}` };
+  }
+  if (item.doctype === 'Server Script' && m.script_type && m.script_type !== 'DocType Event') {
+    return { kind: 'type', script_type: m.script_type, label: `${clean(m.script_type)} scripts` };
   }
   const what = item.doctype === 'Client Script' ? 'Client Script' : (m.script_type || 'Server Script');
   return { kind: 'single', label: `${what}: ${clean(item.name)}`, single: item.slug };
@@ -102,7 +113,7 @@ function readRuleSet(cwd) {
 }
 
 /** Build progress.json from plan.json and manifest.json. Pure: no files are touched. */
-function buildProgress({ plan, manifest, cap, now, rules }) {
+function buildProgress({ plan, manifest, cap, now, rules, only = null }) {
   const warnings = [];
   const seen = new Map();
   const metaOf = (item) => {
@@ -112,7 +123,10 @@ function buildProgress({ plan, manifest, cap, now, rules }) {
     seen.set(item.slug, meta);
     return meta;
   };
-  const review = chunkInto(plan.review || [], metaOf, cap, 'review', (item) => scriptRow(item, metaOf(item), {
+  const allReview = plan.review || [];
+  const inScope = (item) => !only || kindOfDoctype(item.doctype) === only;
+  const deferred = allReview.filter((item) => !inScope(item));
+  const review = chunkInto(allReview.filter(inScope), metaOf, cap, 'review', (item) => scriptRow(item, metaOf(item), {
     status: item.status, reason: item.reason, hash: item.hash, enabled_flipped: item.enabled_flipped || undefined,
   }));
   const contract = chunkInto(plan.impacted || [], metaOf, cap, 'contract', (item) => scriptRow(item, metaOf(item), {
@@ -124,6 +138,7 @@ function buildProgress({ plan, manifest, cap, now, rules }) {
     mode: 'site', site: plan.site, plan_fetched_at: plan.fetched_at, approved: false,
     run_report_file: `octocheck/reports/report-${stamp(now)}.md`,
     group_size_cap: cap,
+    scope: { only: only || null, deferred: deferred.length, deferred_kind: only ? (only === 'server' ? 'client' : 'server') : null },
     rules: rules || null,
     counts: { tasks: tasks.length, review_tasks: review.length, contract_tasks: contract.length, review_scripts: count('review'), contract_scripts: count('contract') },
     tasks,
@@ -171,6 +186,10 @@ async function runTasks(flags, ctx) {
   const { io, cwd } = ctx;
   site.checkSiteName(flags.site);
   if (flags.approve) return approveTasks(flags, ctx);
+  if (flags.only !== undefined && flags.only !== 'server' && flags.only !== 'client') {
+    throw new UserError(`--only must be server or client (found "${String(flags.only)}"). Server means Server Scripts, client means Client Scripts.`);
+  }
+  const only = flags.only || null;
   const stateDir = stateDirFor(cwd, flags.site);
   const plan = readRequired(path.join(stateDir, 'plan.json'), 'plan.json');
   const manifest = readRequired(path.join(stateDir, 'manifest.json'), 'manifest.json');
@@ -179,7 +198,7 @@ async function runTasks(flags, ctx) {
   if (plan.rules_id !== rules.id) {
     throw new UserError(`The rules changed since the last fetch (${plan.rules_id || 'none recorded'} to ${rules.id}), so which scripts need review may be out of date. Run fetch again, then tasks.`);
   }
-  const progress = buildProgress({ plan, manifest, cap: readGroupCap(cwd), now: ctx.now ? ctx.now() : new Date(), rules });
+  const progress = buildProgress({ plan, manifest, cap: readGroupCap(cwd), now: ctx.now ? ctx.now() : new Date(), rules, only });
   // Results and recorded copies belong to the plan that produced them. A new plan has new tasks that
   // reuse the same numbers, so anything left from an earlier plan must never be mistaken for theirs.
   for (const dir of ['results', 'recorded']) fs.rmSync(path.join(stateDir, dir), { recursive: true, force: true });
@@ -188,6 +207,10 @@ async function runTasks(flags, ctx) {
   const c = progress.counts;
   io.out(`${flags.site}: ${c.tasks} task${c.tasks === 1 ? '' : 's'} (${c.review_tasks} review covering ${c.review_scripts} script${c.review_scripts === 1 ? '' : 's'}, ${c.contract_tasks} contract covering ${c.contract_scripts}).`);
   io.out(`Group size cap: ${progress.group_size_cap > 0 ? `${progress.group_size_cap} scripts per task` : 'off'}.`);
+  if (only) {
+    const d = progress.scope;
+    io.out(`Scope: ${only === 'server' ? 'Server Scripts' : 'Client Scripts'} only (--only ${only}). Deferred: ${plural(d.deferred, `${d.deferred_kind} script`)}, never reviewed yet. Review them later with /octocheck-init --site ${flags.site} --only ${d.deferred_kind}.`);
+  }
   io.out(`Rules: ${rules.file} v${rules.version}: ${rules.review_rules} review rules, ${rules.contract_checks} contract checks, ${rules.team_rules} team rule${rules.team_rules === 1 ? '' : 's'}; disabled for this project: ${rules.disabled.length ? rules.disabled.join(', ') : 'none'}.`);
   if (rules.team_discarded.length) io.out(`Note: team rule${rules.team_discarded.length === 1 ? '' : 's'} ${rules.team_discarded.join(', ')} ignored: factors 1-7 and C are reserved for the core rules.`);
   for (const t of progress.tasks) io.out(`  ${t.id}. [${t.type}] ${t.name}: ${t.scripts.length} script${t.scripts.length === 1 ? '' : 's'}`);

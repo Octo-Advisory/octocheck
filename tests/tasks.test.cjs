@@ -102,14 +102,14 @@ module.exports = [
   }],
 
   // --- grouping -----------------------------------------------------------------
-  ['groupOf: DocType Event scripts by DocType + event, Client Scripts by DocType + view, the rest alone', () => {
+  ['groupOf: DocType Event scripts by DocType + event, Client Scripts by DocType + view, other script types by type', () => {
     const ev = groupOf({ doctype: 'Server Script', name: 'a', slug: 'server-a' }, { script_type: 'DocType Event', reference_doctype: 'ToDo', doctype_event: 'Before Save' });
     assert.deepStrictEqual([ev.kind, ev.doctype, ev.event, ev.label], ['event', 'ToDo', 'Before Save', 'DocType Event: ToDo / Before Save']);
     const cs = groupOf({ doctype: 'Client Script', name: 'b', slug: 'client-b' }, { reference_doctype: 'ToDo', apply_to: 'List' });
     assert.deepStrictEqual([cs.kind, cs.doctype, cs.view, cs.label], ['client', 'ToDo', 'List', 'Client Script: ToDo / List']);
     for (const t of ['API', 'Scheduler Event', 'Permission Query']) {
       const g = groupOf({ doctype: 'Server Script', name: 'c', slug: 'server-c' }, { script_type: t });
-      assert.deepStrictEqual([g.kind, g.label], ['single', `${t}: c`]);
+      assert.deepStrictEqual([g.kind, g.label], ['type', `${t} scripts`]);
     }
   }],
   ['groupOf: a DocType Event script with no event, or a Client Script with no view, is not grouped on a guess', () => {
@@ -144,8 +144,8 @@ module.exports = [
     const a = buildProgress({ plan: { site: 's', fetched_at: 'x', review: items, impacted: [] }, manifest, cap: 5, now: NOW });
     const b = buildProgress({ plan: { site: 's', fetched_at: 'x', review: [...items].reverse(), impacted: [] }, manifest, cap: 5, now: NOW });
     assert.deepStrictEqual(a, b);
-    assert.deepStrictEqual(a.tasks.map((t) => t.name), ['DocType Event: ToDo / Validate', 'API: Zed', 'Scheduler Event: Mid']);
-    assert.deepStrictEqual(a.tasks.map((t) => t.group.kind), ['event', 'single', 'single'], 'event groups first, then single scripts');
+    assert.deepStrictEqual(a.tasks.map((t) => t.name), ['DocType Event: ToDo / Validate', 'API scripts', 'Scheduler Event scripts']);
+    assert.deepStrictEqual(a.tasks.map((t) => t.group.kind), ['event', 'type', 'type'], 'event groups first, then groups by script type');
   }],
   ['the report file name uses local time like `date +%Y-%m-%d-%H%M%S`', () => {
     assert.strictEqual(stamp(NOW), '2026-10-09-080005');
@@ -183,8 +183,8 @@ module.exports = [
       [1, 'review', 'DocType Event: Event / Before Save', 1],
       [2, 'review', 'DocType Event: ToDo / Before Save', 4],
       [3, 'review', 'Client Script: ToDo / Form', 1],
-      [4, 'review', 'API: OC Test 4 Guest API', 1],
-      [5, 'review', 'Scheduler Event: OC Test 5 Hardcoded Values', 1],
+      [4, 'review', 'API scripts', 1],
+      [5, 'review', 'Scheduler Event scripts', 1],
     ]);
     assert.deepStrictEqual(names(p.tasks[1]), ['OC Test 1 Missing Field', 'OC Test 2 None Not Handled', 'OC Test 6 Old Disabled Rule', 'OC Test 8 Clean Control']);
     const disabled = p.tasks[1].scripts.find((s) => s.name === 'OC Test 6 Old Disabled Rule');
@@ -484,5 +484,97 @@ module.exports = [
     await t.fetch(new Date(2026, 9, 9, 9, 0, 0));
     assert.strictEqual((await t.tasks()).code, 0, 'after a fresh fetch the new rules are accepted');
     await t.done();
+  }],
+
+  // --- grouping by script type, and --only ------------------------------------------------------------
+  ['API scripts are grouped together, Scheduler scripts together, and the two kinds are never mixed', () => {
+    const mk = (n, type) => ({ slug: `server-${type}-${n}`, doctype: 'Server Script', name: `${type} ${String(n).padStart(2, '0')}`, status: 'new', reason: 'r', hash: 'h', desk_url: 'u', bundle: 'b' });
+    const items = [...Array.from({ length: 12 }, (_, i) => mk(i, 'API')), mk(1, 'Scheduler Event'), mk(2, 'Scheduler Event'), mk(1, 'Permission Query')];
+    const manifest = { scripts: Object.fromEntries(items.map((i) => [`Server Script/${i.name}`, { script_type: i.name.replace(/ \d+$/, '') }])) };
+    const p = buildProgress({ plan: { site: 's', fetched_at: 'x', review: items, impacted: [] }, manifest, cap: 5, now: NOW });
+    assert.deepStrictEqual(p.tasks.map((t) => [t.name, t.scripts.length]), [
+      ['API scripts (part 1 of 3)', 5], ['API scripts (part 2 of 3)', 5], ['API scripts (part 3 of 3)', 2],
+      ['Permission Query scripts', 1], ['Scheduler Event scripts', 2],
+    ]);
+    assert.ok(p.tasks.every((t) => t.group.kind === 'type'));
+    assert.deepStrictEqual(p.tasks[0].group.script_type, 'API');
+  }],
+  ['scripts that cannot be placed (no event, no view, no manifest row) still get a task each', () => {
+    const items = [
+      { slug: 'server-a', doctype: 'Server Script', name: 'A', status: 'new', reason: 'r', hash: 'h', desk_url: 'u', bundle: 'b' },
+      { slug: 'client-b', doctype: 'Client Script', name: 'B', status: 'new', reason: 'r', hash: 'h', desk_url: 'u', bundle: 'b' },
+      { slug: 'server-c', doctype: 'Server Script', name: 'C', status: 'new', reason: 'r', hash: 'h', desk_url: 'u', bundle: 'b' },
+    ];
+    const manifest = { scripts: { 'Server Script/A': { script_type: 'DocType Event', reference_doctype: 'ToDo', doctype_event: null }, 'Client Script/B': { reference_doctype: 'ToDo', apply_to: null } } };
+    const p = buildProgress({ plan: { site: 's', fetched_at: 'x', review: items, impacted: [] }, manifest, cap: 5, now: NOW });
+    assert.deepStrictEqual(p.tasks.map((t) => t.group.kind), ['single', 'single', 'single']);
+    assert.ok(p.notes.some((n) => n.includes('"C" is not in manifest.json')));
+  }],
+  ['--only server builds tasks for Server Scripts only, and says what was deferred and how to review it', async () => {
+    const t = await setup(new FixtureSite());
+    await t.fetch();
+    const r = await t.tasks(['--only', 'server']);
+    assert.strictEqual(r.code, 0, r.text);
+    const p = t.progress();
+    assert.deepStrictEqual(p.tasks.map((x) => x.name), ['DocType Event: Event / Before Save', 'DocType Event: ToDo / Before Save', 'API scripts', 'Scheduler Event scripts']);
+    assert.deepStrictEqual(p.scope, { only: 'server', deferred: 1, deferred_kind: 'client' });
+    assert.strictEqual(p.counts.review_scripts, 7);
+    assert.ok(r.text.includes('Scope: Server Scripts only (--only server). Deferred: 1 client script, never reviewed yet. Review them later with /octocheck-init --site octo-test --only client.'), r.text);
+    assert.ok(r.text.includes('4 tasks (4 review covering 7 scripts'), r.text);
+    await t.done();
+  }],
+  ['--only client builds the Client Script tasks only', async () => {
+    const t = await setup(new FixtureSite());
+    await t.fetch();
+    const r = await t.tasks(['--only', 'client']);
+    assert.strictEqual(r.code, 0, r.text);
+    const p = t.progress();
+    assert.deepStrictEqual(p.tasks.map((x) => x.name), ['Client Script: ToDo / Form']);
+    assert.deepStrictEqual(p.scope, { only: 'client', deferred: 7, deferred_kind: 'server' });
+    assert.ok(r.text.includes('Deferred: 7 server scripts, never reviewed yet. Review them later with /octocheck-init --site octo-test --only server.'), r.text);
+    await t.done();
+  }],
+  ['without --only nothing is deferred, and a bad --only value is refused with a message', async () => {
+    const t = await setup(new FixtureSite());
+    await t.fetch();
+    let r = await t.tasks();
+    assert.deepStrictEqual(t.progress().scope, { only: null, deferred: 0, deferred_kind: null });
+    assert.ok(!r.text.includes('Scope:'), r.text);
+    r = await t.tasks(['--only', 'both']);
+    assert.strictEqual(r.code, 1);
+    assert.ok(r.text.includes('--only must be server or client (found "both").'), r.text);
+    r = await t.tasks(['--only']);
+    assert.strictEqual(r.code, 1);
+    assert.ok(r.text.includes('--only needs a value.'), r.text);
+    await t.done();
+  }],
+  ['--only does not hide a linked script that needs a contract check', async () => {
+    const model = new SiteModel();
+    model.add('Edited Event', { dt: 'ToDo', event: 'Before Save', text: 'doc.priority = 1\n' });
+    model.add('Neighbour Form', { doctype: 'Client Script', dt: 'ToDo', type: null, text: 'frm.doc.priority\n' });
+    model.link('Edited Event', 'Neighbour Form', 'same_field');
+    const t = await setup(model);
+    await t.fetch();
+    for (const s of model.manifest().scripts) {
+      const dir = path.join(t.stateDir, 'entries');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, `${require('../.claude/scripts/octocheck-fetch.cjs').slugOf(s.doctype, s.name)}.json`), JSON.stringify({ doctype: s.doctype, name: s.name, h: s.hash, rev: '2026-10-09', rv: RULES_ID, flags: [] }));
+    }
+    model.edit('Edited Event', 'doc.priority = 9\n');
+    await t.fetch(new Date(2026, 9, 9, 9, 0, 0));
+    const r = await t.tasks(['--only', 'server']);
+    assert.strictEqual(r.code, 0, r.text);
+    assert.deepStrictEqual(t.progress().tasks.map((x) => [x.type, x.name]), [
+      ['review', 'DocType Event: ToDo / Before Save'], ['contract', 'Client Script: ToDo / Form'],
+    ]);
+    assert.strictEqual(t.progress().scope.deferred, 0, 'the neighbour is not a deferred review');
+    await t.done();
+  }],
+  ['/octocheck-init passes --only through to tasks, and never adds it by itself', () => {
+    const text = fs.readFileSync(path.join(ROOT, '.claude', 'commands', 'octocheck-init.md'), 'utf8').replace(/\s+/g, ' ');
+    assert.ok(text.includes('If the user passed `--only server` or `--only client` to `/octocheck-init`, add exactly that option'));
+    assert.ok(text.includes('Never add `--only` on your own.'));
+    assert.ok(text.includes('if there is a "Scope:" line, how many scripts were deferred'));
+    assert.ok(text.includes('`--only server` or `--only client`'));
   }],
 ];

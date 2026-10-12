@@ -45,7 +45,7 @@ async function setup(model) {
     entry: (slug) => JSON.parse(fs.readFileSync(path.join(stateDir, 'entries', `${slug}.json`), 'utf8')),
     reportText: () => fs.readFileSync(path.join(w.cwd, t.progress().run_report_file), 'utf8').replace(/127\.0\.0\.1:\d+/g, 'HOST'),
     reportFiles: () => (fs.existsSync(path.join(w.cwd, 'octocheck', 'reports')) ? fs.readdirSync(path.join(w.cwd, 'octocheck', 'reports')) : []),
-    ready: async (now) => { await t.fetch(now); await t.tasks(); const r = await t.tasks(['--approve']); assert.strictEqual(r.code, 0, r.text); },
+    ready: async (now, args = []) => { await t.fetch(now); const planned = await t.tasks(args); assert.strictEqual(planned.code, 0, planned.text); const r = await t.tasks(['--approve']); assert.strictEqual(r.code, 0, r.text); },
     results: (id, value) => {
       const dir = path.join(stateDir, 'results');
       fs.mkdirSync(dir, { recursive: true });

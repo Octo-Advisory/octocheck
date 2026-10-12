@@ -90,8 +90,11 @@ The overnight (unattended) run is still to come. The rules for UI scripts are in
 **Reviewing a site, in order** (after the one-time setup below). In Claude Code:
 
 1. `/octocheck-init --site my-site` fetches what needs review, groups it into tasks (scripts on the
-   same DocType and event are reviewed together, at most `group_size_cap` per task) and asks you to
-   approve the plan. Nothing is reviewed before you say yes.
+   same DocType and event, or the same DocType and view, are reviewed together; API scripts together,
+   Scheduler scripts together; at most `group_size_cap` per task) and asks you to approve the plan.
+   Nothing is reviewed before you say yes. On a big site, start smaller:
+   `/octocheck-init --site my-site --only server` plans only the Server Scripts (usually the higher
+   risk ones). The Client Scripts stay unreviewed until you run it again with `--only client`.
 2. `/octocheck-continue --site my-site` runs one task, then stops and asks. Claude reads the scripts
    and writes its findings to a small results file. A script checks that file (real rule IDs, real
    line numbers, every script covered) and only then saves anything. Severity and factor always come

@@ -137,7 +137,7 @@ module.exports = [
     await t.record(1);
     const text = t.reportText();
     assert.ok(text.includes('- Task 2 (review): DocType Event: ToDo / Before Save — OC Test 1 Missing Field, OC Test 2 None Not Handled, OC Test 6 Old Disabled Rule, OC Test 8 Clean Control'), text);
-    assert.ok(text.includes('- Task 5 (review): Scheduler Event: OC Test 5 Hardcoded Values — OC Test 5 Hardcoded Values'), text);
+    assert.ok(text.includes('- Task 5 (review): Scheduler Event scripts — OC Test 5 Hardcoded Values'), text);
     assert.ok(text.includes('Tasks completed: 1 / 5'));
     await t.done();
   }],
@@ -322,5 +322,18 @@ module.exports = [
   ['the site CLI documents report', () => {
     const text = fs.readFileSync(path.join(ROOT, '.claude', 'scripts', 'octocheck-site.cjs'), 'utf8');
     assert.ok(text.includes('report --site <name>'));
+  }],
+
+  ['a server-only run says so in the report, and the deferred scripts come back in the next plan', async () => {
+    const t = await setup(new FixtureSite());
+    await t.ready(undefined, ['--only', 'server']);
+    const tasks = t.progress().tasks;
+    for (const task of tasks) { t.fill(task.id); assert.strictEqual((await t.record(task.id)).code, 0); }
+    const text = t.reportText();
+    assert.ok(text.includes('Scope: Server Scripts only (--only server). Deferred, never reviewed yet: 1 client script. Review them later with /octocheck-init --site octo-test --only client.'), text);
+    assert.ok(text.includes('Tasks completed: 4 / 4') && !text.includes('INCOMPLETE'), text);
+    await t.fetch(LATER);
+    assert.deepStrictEqual(t.plan().review.map((x) => x.name), ['OC Test 7 Client Call'], 'only the deferred client script is queued next');
+    await t.done();
   }],
 ];

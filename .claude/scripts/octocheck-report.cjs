@@ -130,6 +130,10 @@ function buildReport({ cwd, stateDir, now }) {
   if (rs) {
     push(`Rules: UI-script rules v${esc(rs.version)} (${rs.review_rules} review rules, ${rs.contract_checks} contract checks, ${plural(rs.team_rules || 0, 'team rule')}; disabled for this project: ${rs.disabled && rs.disabled.length ? rs.disabled.join(', ') : 'none'})`);
   }
+  if (progress.scope && progress.scope.only) {
+    const d = progress.scope;
+    push(`Scope: ${d.only === 'server' ? 'Server Scripts' : 'Client Scripts'} only (--only ${d.only}). Deferred, never reviewed yet: ${plural(d.deferred, `${d.deferred_kind} script`)}. Review them later with /octocheck-init --site ${esc(progress.site)} --only ${d.deferred_kind}.`);
+  }
   push(`Plan fetched: ${utc(plan.fetched_at)}${progress.approved_at ? `, approved: ${utc(progress.approved_at)}` : ''}`);
   push(`Tasks completed: ${done} / ${total}`);
   push(`Scripts reviewed this run: ${taskScripts.length} (${by.new} new, ${by.changed} changed, ${by.rules} queued because the rules changed, ${by.age} expired by age)`);

@@ -140,7 +140,10 @@ involved and you never see the key. If it fails, show its message as it is and s
 with other options, and never try to read, print or search for credentials.
 
 ## S2 — Build the tasks
-Run `node .claude/scripts/octocheck-site.cjs tasks --site <name>` and show its output as it is.
+Run `node .claude/scripts/octocheck-site.cjs tasks --site <name>` and show its output as it is. If
+the user passed `--only server` or `--only client` to `/octocheck-init`, add exactly that option
+(`--only` limits the plan to Server Scripts or to Client Scripts; the other kind is left for a later
+run). Never add `--only` on your own.
 If it reports 0 tasks, say nothing needs review (every script is unchanged and nothing is linked
 to a change), do not ask for approval, and stop.
 
@@ -151,12 +154,13 @@ tasks, R scripts to review, L linked scripts to re-check), ask exactly:
 > "Here's the review plan — N tasks covering M scripts (R to review, L linked scripts to re-check). Approve this plan? (yes/no)"
 
 Before asking, point out anything the output flagged: rules disabled for this project, team
-rules added or ignored, removed scripts, and any note. Do not open a bundle or read any script's
+rules added or ignored, removed scripts, any note, and, if there is a "Scope:" line, how many
+scripts were deferred and that `/octocheck-init --site <name> --only <kind>` reviews them later. Do not open a bundle or read any script's
 text.
 
 Wait for an explicit yes; never infer one. If the answer is no, ask what to change. Tasks per
-group is `group_size_cap` in `octocheck.config.yaml`, and the linked-script limit is
-`--blast-radius`. After the user changes one, run S1 or S2 again and ask again.
+group is `group_size_cap` in `octocheck.config.yaml`, the linked-script limit is `--blast-radius`,
+and a plan can be limited to one kind of script with `--only server` or `--only client`. After the user changes one, run S1 or S2 again and ask again.
 
 On yes, run `node .claude/scripts/octocheck-site.cjs tasks --site <name> --approve`. If it says the
 plan is out of date, run S2 again and ask again. Otherwise tell the user to run
