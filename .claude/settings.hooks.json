@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/block-source-write.cjs"
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-source-write.cjs\" || exit 2"
           }
         ]
       },
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/block-credentials-read.cjs"
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-credentials-read.cjs\" || exit 2"
           }
         ]
       }

@@ -59,6 +59,29 @@ module.exports = [
     fs.rmSync(dir, { recursive: true, force: true });
   }],
 
+
+  ['both installers warn when the project still has the old relative hook commands, and stay quiet when it has the new ones', async () => {
+    const hasBash = !spawnSync('bash', ['--version'], { encoding: 'utf8' }).error;
+    const installers = [(dir) => spawnSync(process.execPath, [path.join(ROOT, 'bin', 'install.js'), dir], { encoding: 'utf8' })]
+      .concat(hasBash ? [(dir) => spawnSync('bash', [path.join(ROOT, 'install.sh'), dir], { encoding: 'utf8' })] : []);
+    for (const install of installers) {
+      const oldDir = target();
+      fs.mkdirSync(path.join(oldDir, '.claude'), { recursive: true });
+      fs.writeFileSync(path.join(oldDir, '.claude', 'settings.json'), JSON.stringify({ hooks: { PreToolUse: [{ matcher: 'Write', hooks: [{ type: 'command', command: 'node .claude/hooks/block-source-write.cjs' }] }] } }));
+      const warned = install(oldDir);
+      assert.strictEqual(warned.status, 0, warned.stderr);
+      assert.ok(warned.stdout.includes('WARNING: .claude/settings.json uses the OLD hook commands'), warned.stdout);
+      assert.ok(warned.stdout.includes('$CLAUDE_PROJECT_DIR'), warned.stdout);
+      const newDir = target();
+      fs.mkdirSync(path.join(newDir, '.claude'), { recursive: true });
+      fs.copyFileSync(path.join(ROOT, '.claude', 'settings.hooks.json'), path.join(newDir, '.claude', 'settings.json'));
+      const quiet = install(newDir);
+      assert.ok(!quiet.stdout.includes('WARNING'), quiet.stdout);
+      fs.rmSync(oldDir, { recursive: true, force: true });
+      fs.rmSync(newDir, { recursive: true, force: true });
+    }
+  }],
+
   ['the installers never overwrite the team\'s own settings', async () => {
     const dir = target();
     fs.writeFileSync(path.join(dir, 'octocheck.config.yaml'), 'review_expiry_days: 7\n');

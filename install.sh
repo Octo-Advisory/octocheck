@@ -67,4 +67,13 @@ echo "into your project's .claude/settings.json under the \"hooks\" key."
 echo "It registers two hooks: the write guard and the credentials guard (needed only if you review"
 echo "Frappe sites; the site setup refuses to save a secret without it)."
 echo
+for f in settings.json settings.local.json; do
+  if grep -qs 'node \.claude/hooks/' "$TARGET_DIR/.claude/$f"; then
+    echo "WARNING: .claude/$f uses the OLD hook commands (\"node .claude/hooks/...\"). Those stop working"
+    echo "whenever Claude changes folder, and a hook that cannot run does NOT block anything. Replace them with the"
+    echo "commands in .claude/settings.hooks.json (they start with node \"\$CLAUDE_PROJECT_DIR\"/... and end with || exit 2)."
+    echo
+  fi
+done
+
 echo "Install complete. Next: open Claude Code in this repo and run /octocheck-init"

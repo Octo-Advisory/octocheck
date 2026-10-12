@@ -78,4 +78,14 @@ console.log(`  ${path.join(sourceDir, '.claude', 'settings.hooks.json')}`);
 console.log('into your project\'s .claude/settings.json under the "hooks" key. It registers two hooks: the write guard and the');
 console.log('credentials guard (needed only if you review Frappe sites; the site setup refuses to save a secret without it).\n');
 
+for (const name of ['settings.json', 'settings.local.json']) {
+  let text = '';
+  try { text = fs.readFileSync(path.join(targetDir, '.claude', name), 'utf8'); } catch (e) { /* not there */ }
+  if (/node \.claude\/hooks\//.test(text)) {
+    console.log(`WARNING: .claude/${name} uses the OLD hook commands ("node .claude/hooks/..."). Those stop working`);
+    console.log('whenever Claude changes folder, and a hook that cannot run does NOT block anything. Replace them with the');
+    console.log('commands in .claude/settings.hooks.json (they start with node "$CLAUDE_PROJECT_DIR"/... and end with || exit 2).\n');
+  }
+}
+
 console.log('Install complete. Next: open Claude Code in this repo and run /octocheck-init');

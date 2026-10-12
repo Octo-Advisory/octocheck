@@ -1,5 +1,7 @@
 'use strict';
 const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { shouldBlock } = require('../.claude/hooks/block-credentials-read.cjs');
@@ -99,5 +101,45 @@ module.exports = [
       assert.ok(new RegExp(`(^|\\|)${tool}(\\||$)`).test(creds.matcher), `credentials guard does not cover ${tool}`);
     }
     assert.strictEqual(write.matcher, 'Edit|Write|MultiEdit|NotebookEdit');
+  }],
+
+  ['the hook commands find their files through the project folder and fail closed', async () => {
+    const cfg = require('../.claude/settings.hooks.json');
+    for (const entry of cfg.hooks.PreToolUse) {
+      for (const h of entry.hooks) {
+        assert.ok(h.command.includes('"$CLAUDE_PROJECT_DIR/.claude/hooks/'), `not tied to the project folder: ${h.command}`);
+        assert.ok(h.command.endsWith('|| exit 2'), `does not block when the hook cannot run: ${h.command}`);
+        assert.ok(!/^node \.claude\//.test(h.command), 'a path relative to the current folder breaks when the shell changes folder');
+      }
+    }
+  }],
+  ['both guards still work, and still block, when the shell is in a sub-folder or the hook cannot run', async () => {
+    const project = fs.mkdtempSync(path.join(os.tmpdir(), 'octocheck-hookproj-'));
+    const hooksDir = path.join(project, '.claude', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    for (const f of ['block-source-write.cjs', 'block-credentials-read.cjs']) fs.copyFileSync(path.join(__dirname, '..', '.claude', 'hooks', f), path.join(hooksDir, f));
+    const deep = path.join(project, 'octocheck', 'cache', 'sites', 'x', 'bundles');
+    fs.mkdirSync(deep, { recursive: true });
+    const cfg = require('../.claude/settings.hooks.json').hooks.PreToolUse;
+    const command = (name) => cfg.find((e) => e.hooks[0].command.includes(name)).hooks[0].command;
+    const run = (name, payload, projectDir = project, cwd = deep) => spawnSync('sh', ['-c', command(name)], {
+      cwd, input: JSON.stringify(payload), encoding: 'utf8', env: { PATH: process.env.PATH, HOME: '/home/sanket', CLAUDE_PROJECT_DIR: projectDir },
+    });
+    const outside = { tool_name: 'Write', tool_input: { file_path: path.join(project, 'src', 'app.py') }, cwd: deep };
+    const inside = { tool_name: 'Write', tool_input: { file_path: path.join(project, 'octocheck', 'cache', 'sites', 'x', 'results', 'task-1.json') }, cwd: deep };
+    const creds = { tool_name: 'Read', tool_input: { file_path: '~/.config/octocheck/octocheck-credentials.json' }, cwd: deep };
+    assert.strictEqual(run('block-source-write', outside).status, 2, 'a write outside octocheck/ is blocked from a sub-folder');
+    assert.strictEqual(run('block-source-write', inside).status, 0, 'a write inside octocheck/ is allowed from a sub-folder');
+    assert.strictEqual(run('block-credentials-read', creds).status, 2, 'reading the credentials file is blocked from a sub-folder');
+    assert.strictEqual(run('block-credentials-read', inside).status, 0);
+    // A hook that cannot run must block, not wave the call through.
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'octocheck-nohook-'));
+    assert.strictEqual(run('block-source-write', inside, empty).status, 2, 'missing write guard blocks');
+    assert.strictEqual(run('block-credentials-read', inside, empty).status, 2, 'missing credentials guard blocks');
+    // What the old relative command did from a sub-folder: it failed with code 1, which does not block.
+    const old = spawnSync('sh', ['-c', 'node .claude/hooks/block-source-write.cjs'], { cwd: deep, input: JSON.stringify(outside), encoding: 'utf8', env: { PATH: process.env.PATH } });
+    assert.ok(old.status !== 0 && old.status !== 2, `the old form failed open (status ${old.status})`);
+    fs.rmSync(project, { recursive: true, force: true });
+    fs.rmSync(empty, { recursive: true, force: true });
   }],
 ];

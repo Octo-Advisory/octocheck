@@ -50,7 +50,10 @@ already be customized: open `.claude/settings.hooks.json` from this repo and mer
 `"hooks"` key into your project's `.claude/settings.json`. It registers two hooks: the write
 guard, and the credentials guard (which only matters if you review Frappe sites). Without
 this step, read-only enforcement still works via `allowed-tools`, just without the independent
-process-level backstop.
+process-level backstop. If you merged an older copy of this file, merge it again: the old hook
+commands used a path relative to the current folder, which breaks when Claude changes folder,
+and a hook that cannot run blocks nothing. The current commands find the hook files through
+`$CLAUDE_PROJECT_DIR` and end with `|| exit 2`, so a hook that cannot run blocks the tool call.
 
 ## Use
 
