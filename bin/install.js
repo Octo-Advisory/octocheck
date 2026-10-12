@@ -42,6 +42,7 @@ copyFile('.claude/scripts/octocheck-site.cjs', '.claude/scripts/octocheck-site.c
 copyFile('.claude/scripts/octocheck-fetch.cjs', '.claude/scripts/octocheck-fetch.cjs');
 copyFile('.claude/scripts/octocheck-schema.cjs', '.claude/scripts/octocheck-schema.cjs');
 copyFile('.claude/scripts/octocheck-tasks.cjs', '.claude/scripts/octocheck-tasks.cjs');
+copyFile('.claude/scripts/octocheck-review.cjs', '.claude/scripts/octocheck-review.cjs');
 copyFile('.claude/scripts/octocheck-rules.cjs', '.claude/scripts/octocheck-rules.cjs');
 copyFile('.claude/scripts/bundle_schema_v1.json', '.claude/scripts/bundle_schema_v1.json');
 copyFile('rules/rules.core.yaml', 'rules/rules.core.yaml');

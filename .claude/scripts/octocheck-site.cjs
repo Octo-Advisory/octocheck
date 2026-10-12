@@ -550,11 +550,14 @@ const USAGE = `OctoCheck site script
   tasks  --site <name> [--approve]                                   group the fetched scripts into review tasks;
                                                                      --approve records the user's yes to the plan
                                                                      (see octocheck-tasks.cjs)
+  next   --site <name>                                               show the next task of an approved plan
+  record --site <name> --task <n> [--file <path>]                    check the findings Claude wrote, then save them
+                                                                     (see octocheck-review.cjs)
 
 Run setup and rotate in a normal terminal, not inside Claude Code.`;
 
 const FLAGS = {
-  site: true, profile: true, url: true, 'blast-radius': true, 'skip-hook-check': false, 'allow-insecure-http': false, approve: false, help: false,
+  site: true, profile: true, url: true, 'blast-radius': true, 'skip-hook-check': false, 'allow-insecure-http': false, approve: false, task: true, file: true, help: false,
 };
 
 function parseArgs(argv) {
@@ -593,6 +596,8 @@ async function main(argv, ctxOverrides = {}) {
     else if (command === 'list') runList(ctx);
     else if (command === 'fetch') await require('./octocheck-fetch.cjs').runFetch(flags, ctx);
     else if (command === 'tasks') await require('./octocheck-tasks.cjs').runTasks(flags, ctx);
+    else if (command === 'next') require('./octocheck-review.cjs').runNext(flags, ctx);
+    else if (command === 'record') require('./octocheck-review.cjs').runRecord(flags, ctx);
     else throw new UserError(`Unknown command: ${command}\n\n${USAGE}`);
     return 0;
   } catch (e) {

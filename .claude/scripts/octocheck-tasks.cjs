@@ -103,8 +103,10 @@ const UI_RULES_FILE = 'rules/rules.ui-scripts.yaml';
  * Which rules this project will use: the UI rules, minus any the project disabled in
  * rules.local.yaml, plus any team rules it added for the ui-script stack. A disabled rule is
  * listed, never silently dropped. Team rules may not reuse the reserved factors (1-7 and C).
+ * Returns { summary, active }: the summary goes into progress.json, `active` is the list of
+ * rules in force (the review checks results against it).
  */
-function readRuleSet(cwd) {
+function loadRules(cwd) {
   const read = (file) => { try { return fs.readFileSync(path.join(cwd, file), 'utf8'); } catch (e) { return null; } };
   const parse = (file, text) => {
     try { return parseRules(text); } catch (e) {
@@ -117,6 +119,7 @@ function readRuleSet(cwd) {
   const core = parse(UI_RULES_FILE, coreText);
   const ids = new Set(core.rules.map((r) => r.id));
   const out = { file: UI_RULES_FILE, version: core.version, review_rules: 0, contract_checks: 0, disabled: [], team_added: [], team_discarded: [] };
+  const teamRules = [];
   const localText = read('rules.local.yaml');
   if (localText !== null) {
     for (const r of parse('rules.local.yaml', localText).rules) {
@@ -124,16 +127,21 @@ function readRuleSet(cwd) {
         if (ids.has(r.id)) out.disabled.push(r.id);
       } else if (r.stack === 'ui-script') {
         const reserved = r.factor === 'C' || (Number.isInteger(r.factor) && r.factor >= 1 && r.factor <= 7);
-        (reserved ? out.team_discarded : out.team_added).push(r.id);
+        if (reserved) { out.team_discarded.push(r.id); } else { out.team_added.push(r.id); teamRules.push(r); }
       }
     }
   }
+  const active = core.rules.filter((r) => !out.disabled.includes(r.id)).concat(teamRules);
   for (const r of core.rules) {
     if (out.disabled.includes(r.id)) continue;
     if (r.factor === 'C') out.contract_checks += 1; else out.review_rules += 1;
   }
   out.team_rules = out.team_added.length;
-  return out;
+  return { summary: out, active };
+}
+
+function readRuleSet(cwd) {
+  return loadRules(cwd).summary;
 }
 
 /** Build progress.json from plan.json and manifest.json. Pure: no files are touched. */
@@ -227,4 +235,4 @@ async function runTasks(flags, ctx) {
   return progress;
 }
 
-module.exports = { runTasks, approveTasks, buildProgress, groupOf, readGroupCap, readRuleSet, stamp, DEFAULT_GROUP_CAP };
+module.exports = { runTasks, approveTasks, buildProgress, groupOf, readGroupCap, readRuleSet, loadRules, readRequired, stamp, DEFAULT_GROUP_CAP };

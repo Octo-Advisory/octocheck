@@ -435,12 +435,6 @@ module.exports = [
     assert.ok(siteMode.includes('If it reports 0 tasks'));
     assert.ok(!/\bEdit\b|\bWrite tool\b/.test(siteMode), 'site mode asks for no file writes');
   }],
-  ['/octocheck-continue refuses --site for now instead of running repo steps on it', () => {
-    const text = fs.readFileSync(path.join(ROOT, '.claude', 'commands', 'octocheck-continue.md'), 'utf8');
-    assert.ok(text.includes('**Site mode is not available in this command yet.**'));
-    assert.ok(text.indexOf('Site mode is not available') < text.indexOf('## Step 1 — Load state'));
-    assert.ok(text.includes('## Step 7 — Run complete'), 'repo mode is intact');
-  }],
   ['the site CLI accepts --approve and documents it', () => {
     assert.strictEqual(site.parseArgs(['tasks', '--site', 'x', '--approve']).flags.approve, true);
     assert.ok(fs.readFileSync(path.join(ROOT, '.claude', 'scripts', 'octocheck-site.cjs'), 'utf8').includes('tasks  --site <name> [--approve]'));
