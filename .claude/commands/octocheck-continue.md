@@ -183,6 +183,8 @@ question:
 
 > "Task {n} of {total} complete — {flag count} flags found. Continue with Task {n+1}? (yes/no)"
 
-Take n, total, the flag count and the next task from record's output. If it was the last task,
-run `next` for the summary instead of asking, and give it as it is. The report for the run is
-built from the recorded results in a later step.
+Take n, total, the flag count and the next task from record's output. The report is built by a
+script after every task, never by you: record prints its path on a "Report updated" line, and you
+may mention it, but do not open or edit it. If record printed a "Warning" about the report, repeat
+it to the user. If it was the last task, run `next` for the summary instead of asking, and give it
+as it is, including the report path.

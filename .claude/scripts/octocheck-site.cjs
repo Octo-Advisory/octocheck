@@ -553,6 +553,8 @@ const USAGE = `OctoCheck site script
   next   --site <name>                                               show the next task of an approved plan
   record --site <name> --task <n> [--file <path>]                    check the findings Claude wrote, then save them
                                                                      (see octocheck-review.cjs)
+  report --site <name>                                               rebuild this run's report from the saved state
+                                                                     (see octocheck-report.cjs)
 
 Run setup and rotate in a normal terminal, not inside Claude Code.`;
 
@@ -598,6 +600,7 @@ async function main(argv, ctxOverrides = {}) {
     else if (command === 'tasks') await require('./octocheck-tasks.cjs').runTasks(flags, ctx);
     else if (command === 'next') require('./octocheck-review.cjs').runNext(flags, ctx);
     else if (command === 'record') require('./octocheck-review.cjs').runRecord(flags, ctx);
+    else if (command === 'report') require('./octocheck-report.cjs').runReport(flags, ctx);
     else throw new UserError(`Unknown command: ${command}\n\n${USAGE}`);
     return 0;
   } catch (e) {

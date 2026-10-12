@@ -193,7 +193,17 @@ async function runTasks(flags, ctx) {
   for (const t of progress.tasks) io.out(`  ${t.id}. [${t.type}] ${t.name}: ${t.scripts.length} script${t.scripts.length === 1 ? '' : 's'}`);
   for (const r of progress.removed.slice(0, 20)) io.out(`Removed since the last review: ${clean(r.name)}`);
   for (const n of progress.notes) io.out(`Note: ${n}`);
-  io.out(`Report will be written to: ${progress.run_report_file}`);
+  if (progress.tasks.length === 0) {
+    // Nothing will be recorded, so nothing else would ever write this run's report.
+    try {
+      const r = require('./octocheck-report.cjs').writeReport({ cwd, stateDir, now: ctx.now ? ctx.now() : new Date() });
+      io.out(`Nothing to review. Report written: ${r.rel}`);
+    } catch (e) {
+      io.out(`Warning: the report could not be built (${String(e && e.message ? e.message : e).split('\n')[0]}). Run report --site ${flags.site} to try again.`);
+    }
+  } else {
+    io.out(`Report will be written to: ${progress.run_report_file}`);
+  }
   io.out(`Progress: ${path.relative(cwd, path.join(stateDir, 'progress.json'))}`);
   return progress;
 }

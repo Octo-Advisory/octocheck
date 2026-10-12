@@ -13,7 +13,7 @@ const INSTALLED = [
   '.claude/hooks/block-source-write.cjs', '.claude/hooks/block-credentials-read.cjs',
   '.claude/scripts/octocheck-site.cjs', '.claude/scripts/octocheck-fetch.cjs',
   '.claude/scripts/octocheck-schema.cjs', '.claude/scripts/bundle_schema_v1.json',
-  '.claude/scripts/octocheck-tasks.cjs', '.claude/scripts/octocheck-review.cjs', '.claude/scripts/octocheck-rules.cjs',
+  '.claude/scripts/octocheck-tasks.cjs', '.claude/scripts/octocheck-review.cjs', '.claude/scripts/octocheck-report.cjs', '.claude/scripts/octocheck-rules.cjs',
   'rules/rules.core.yaml', 'rules/rules.ui-scripts.yaml', 'rules.local.yaml', 'octocheck.config.yaml',
 ];
 

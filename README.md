@@ -83,8 +83,28 @@ and a hook that cannot run blocks nothing. The current commands find the hook fi
 OctoCheck can also review Server Scripts and Client Scripts that live in a Frappe site's
 database, through the read-only `octocheck_connector` app installed on that site
 (`github.com/Octo-Advisory/octocheck_frappe`, v0.1.0 or later). This part is being built in
-steps; **today the connection setup and `fetch` exist**. The review commands for sites
-(`/octocheck-init --site`) and the site rules come next.
+steps; **setup, `fetch`, the approved review plan, the review loop and the report all work today**.
+The overnight (unattended) run is still to come. The rules for UI scripts are in
+`rules/rules.ui-scripts.yaml` and are still a draft for your team to review.
+
+**Reviewing a site, in order** (after the one-time setup below). In Claude Code:
+
+1. `/octocheck-init --site my-site` fetches what needs review, groups it into tasks (scripts on the
+   same DocType and event are reviewed together, at most `group_size_cap` per task) and asks you to
+   approve the plan. Nothing is reviewed before you say yes.
+2. `/octocheck-continue --site my-site` runs one task, then stops and asks. Claude reads the scripts
+   and writes its findings to a small results file. A script checks that file (real rule IDs, real
+   line numbers, every script covered) and only then saves anything. Severity and factor always come
+   from the rules file, never from Claude.
+3. After every task a script rebuilds the report, `octocheck/reports/report-<time>.md`, from the saved
+   state. Until the last task is done it starts with an INCOMPLETE banner. It lists the flags by
+   factor with a link into Desk for each script, a summary table, the contract checks, and, for
+   scripts that did not change, the flags carried forward from their last review. Claude writes none
+   of it. `report --site my-site` rebuilds it on demand. See `examples/sample-site-report.md`.
+
+A script is queued again when it changed, when its last review is older than `review_expiry_days`,
+or when the rules changed since that review. You never need to clean up results files: each one is
+deleted once it is recorded, and a new plan always starts clean.
 
 **One-time setup per site.** Run this in a normal terminal, **not inside Claude Code**. The key
 and secret are typed at a hidden prompt, so they never appear in a conversation:

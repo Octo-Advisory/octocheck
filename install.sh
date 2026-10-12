@@ -32,6 +32,7 @@ cp -v "$SOURCE_DIR/.claude/scripts/octocheck-fetch.cjs" "$TARGET_DIR/.claude/scr
 cp -v "$SOURCE_DIR/.claude/scripts/octocheck-schema.cjs" "$TARGET_DIR/.claude/scripts/"
 cp -v "$SOURCE_DIR/.claude/scripts/octocheck-tasks.cjs" "$TARGET_DIR/.claude/scripts/"
 cp -v "$SOURCE_DIR/.claude/scripts/octocheck-review.cjs" "$TARGET_DIR/.claude/scripts/"
+cp -v "$SOURCE_DIR/.claude/scripts/octocheck-report.cjs" "$TARGET_DIR/.claude/scripts/"
 cp -v "$SOURCE_DIR/.claude/scripts/octocheck-rules.cjs" "$TARGET_DIR/.claude/scripts/"
 cp -v "$SOURCE_DIR/.claude/scripts/bundle_schema_v1.json" "$TARGET_DIR/.claude/scripts/"
 

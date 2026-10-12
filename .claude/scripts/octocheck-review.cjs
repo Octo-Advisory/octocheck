@@ -27,6 +27,7 @@ const site = require('./octocheck-site.cjs');
 const { clean, stateDirFor } = require('./octocheck-fetch.cjs');
 const { readRequired } = require('./octocheck-tasks.cjs');
 const { loadRules } = require('./octocheck-rules.cjs');
+const { writeReport } = require('./octocheck-report.cjs');
 
 const { UserError } = site;
 const MAX_FLAGS_PER_SCRIPT = 40;
@@ -90,7 +91,7 @@ function summaryLines(progress) {
   return [
     `Every task in this plan is done (${progress.tasks.length}).`,
     `Flags saved: ${n} (${total.high} high, ${total.medium} medium, ${total.low} low).`,
-    `Report file name for this run: ${progress.run_report_file} (the report itself is built in the next increment).`,
+    `Report for this run: ${progress.run_report_file}`,
   ];
 }
 
@@ -295,6 +296,13 @@ function runRecord(flags, ctx) {
   io.out(`Task ${task.id} of ${progress.tasks.length} complete — ${plural(total, 'flag')} found.`);
   const next = firstPending(progress);
   io.out(next ? `Next: Task ${next.id}: ${next.name}` : 'That was the last task. Run next for the summary.');
+  // The report is rebuilt after every task. A failure here must never lose the flags, which are saved.
+  try {
+    const r = writeReport({ cwd, stateDir, now: ctx.now ? ctx.now() : new Date() });
+    io.out(`Report updated: ${r.rel} (${r.done} of ${plural(r.total, 'task')} done${r.incomplete ? ', incomplete' : ''}).`);
+  } catch (e) {
+    io.out(`Warning: the report could not be built (${String(e && e.message ? e.message : e).split('\n')[0]}). Your flags are saved. Run report --site ${flags.site} to try again.`);
+  }
   return { task, counts, remaining };
 }
 
