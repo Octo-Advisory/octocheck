@@ -168,7 +168,7 @@ rules file. Never flag factor 4 (tests). Give each flag the real line number ins
 what a rule describes.
 
 ## S3 — Write the results
-Write the results file at the exact path the brief gives, in the exact JSON shape it shows, with
+Create the results file at the exact path the brief gives (it does not exist yet; never edit or reuse an older results file), in the exact JSON shape it shows, with
 an item for EVERY script in the task (`"flags": []` when there is nothing to flag). Contract flags
 carry a `trigger` from the brief; review flags do not.
 

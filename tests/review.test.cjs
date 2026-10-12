@@ -485,4 +485,59 @@ module.exports = [
     assert.strictEqual(t.entry(t.slug(1, T3)).rv, '0.3.0-draft');
     await t.done();
   }],
+
+  // --- results files never outlive their task -----------------------------------------------------
+  ['record consumes the results file, and the checked copy stays in recorded/', async () => {
+    const t = await setup(new FixtureSite());
+    await t.ready();
+    t.fill(1);
+    const resultsFile = path.join(t.stateDir, 'results', 'task-1.json');
+    assert.ok(fs.existsSync(resultsFile));
+    assert.strictEqual((await t.record(1)).code, 0);
+    assert.ok(!fs.existsSync(resultsFile), 'the input is gone after a successful record');
+    assert.ok(fs.existsSync(path.join(t.stateDir, 'recorded', 'task-1.json')));
+    await t.done();
+  }],
+  ['a refused record keeps the results file, so it can be fixed', async () => {
+    const t = await setup(new FixtureSite());
+    await t.ready();
+    t.results(1, { task: 1, scripts: [] });
+    assert.strictEqual((await t.record(1)).code, 1);
+    assert.ok(fs.existsSync(path.join(t.stateDir, 'results', 'task-1.json')));
+    await t.done();
+  }],
+  ['next deletes an old results file for the task and says so, so an earlier answer is never reused', async () => {
+    const t = await setup(new FixtureSite());
+    await t.ready();
+    t.fill(1, { [T3]: [{ line: 1, rule: 'UI-24', note: 'left over from before' }] });
+    const r = await t.next();
+    assert.strictEqual(r.code, 0, r.text);
+    assert.ok(r.text.includes('an old results file for this task was found and deleted'), r.text);
+    assert.ok(r.text.includes('(it does not exist yet)'), r.text);
+    assert.ok(!fs.existsSync(path.join(t.stateDir, 'results', 'task-1.json')));
+    const missing = await t.record(1);
+    assert.ok(missing.text.includes('The results file is missing'), 'the old answer cannot be recorded');
+    assert.strictEqual(t.entryFiles().length, 0);
+    const clean = await t.next();
+    assert.ok(!clean.text.includes('old results file'), 'no note when there was nothing to delete');
+    await t.done();
+  }],
+  ['a new plan clears results and recorded copies from the plan before it: an identical rerun cannot reuse old answers', async () => {
+    const t = await setup(new FixtureSite());
+    await t.ready();
+    for (let id = 1; id <= 5; id += 1) { t.fill(id); assert.strictEqual((await t.record(id)).code, 0); }
+    t.fill(1); // an old answer left behind
+    assert.ok(fs.existsSync(path.join(t.stateDir, 'recorded', 'task-5.json')));
+    const rulesFile = path.join(t.w.cwd, 'rules', 'rules.ui-scripts.yaml');
+    fs.writeFileSync(rulesFile, fs.readFileSync(rulesFile, 'utf8').replace('# version: 0.2.0-draft', '# version: 0.3.0-draft'));
+    await t.fetch(new Date(2026, 9, 9, 11, 0, 0)); // the same eight scripts come back, in the same five tasks
+    await t.tasks();
+    assert.ok(!fs.existsSync(path.join(t.stateDir, 'results')), 'old results are gone');
+    assert.ok(!fs.existsSync(path.join(t.stateDir, 'recorded')), 'old recorded copies are gone');
+    assert.strictEqual((await t.tasks(['--approve'])).code, 0);
+    const r = await t.record(1);
+    assert.strictEqual(r.code, 1);
+    assert.ok(r.text.includes('The results file is missing'), r.text);
+    await t.done();
+  }],
 ];

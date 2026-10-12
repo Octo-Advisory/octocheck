@@ -105,6 +105,9 @@ function runNext(flags, ctx) {
   const rules = rulesFor(active, task, kinds);
   const rel = (p) => slashes(path.relative(cwd, path.join(stateDir, p)));
   const resultsFile = rel(`results/task-${task.id}.json`);
+  const resultsAbs = path.join(stateDir, 'results', `task-${task.id}.json`);
+  let removedStale = false;
+  if (fs.existsSync(resultsAbs)) { fs.rmSync(resultsAbs, { force: true }); removedStale = true; }
   const done = progress.tasks.filter((t) => t.status === 'done').length;
   const contract = task.type === 'contract';
 
@@ -130,7 +133,8 @@ function runNext(flags, ctx) {
   io.out(`Rules that apply (${rules.length}). Use only these IDs. Severity is fixed by the rules file, so do not put one in the results:`);
   for (const r of rules) io.out(`  ${r.id} [${r.severity}] factor ${r.factor} ${r.factor_name}: ${r.description}`);
   io.out('');
-  io.out(`Write your findings to ${resultsFile} as JSON, listing EVERY script above, with "flags": [] for a script with no findings:`);
+  if (removedStale) io.out(`Note: an old results file for this task was found and deleted, because it was written before this brief. Write a new one.`);
+  io.out(`Create the file ${resultsFile} (it does not exist yet) with your findings as JSON, listing EVERY script above, with "flags": [] for a script with no findings:`);
   const flagLine = `{ "line": <number or null>, "rule": "<rule ID from the list>", "note": "<one line>"${contract ? ', "trigger": "<trigger slug from above>"' : ''} }`;
   io.out('(the <...> parts are placeholders, not values to copy)');
   io.out('{');
@@ -281,6 +285,8 @@ function runRecord(flags, ctx) {
     }
   }
   writeFileAtomic(path.join(stateDir, 'progress.json'), `${JSON.stringify(progress, null, 2)}\n`);
+  // The checked copy is in recorded/. The input is consumed, so it can never be recorded twice or reused.
+  fs.rmSync(path.join(stateDir, 'results', `task-${task.id}.json`), { force: true });
 
   io.out(`Task ${task.id} recorded: ${plural(total, 'flag')} (${counts.high} high, ${counts.medium} medium, ${counts.low} low).`);
   for (const item of scripts) io.out(`  ${clean(bySlug.get(item.slug).name)}: ${plural(item.flags.length, 'flag')}`);

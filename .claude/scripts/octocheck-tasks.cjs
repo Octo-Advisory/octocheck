@@ -180,6 +180,9 @@ async function runTasks(flags, ctx) {
     throw new UserError(`The rules changed since the last fetch (${plan.rules_id || 'none recorded'} to ${rules.id}), so which scripts need review may be out of date. Run fetch again, then tasks.`);
   }
   const progress = buildProgress({ plan, manifest, cap: readGroupCap(cwd), now: ctx.now ? ctx.now() : new Date(), rules });
+  // Results and recorded copies belong to the plan that produced them. A new plan has new tasks that
+  // reuse the same numbers, so anything left from an earlier plan must never be mistaken for theirs.
+  for (const dir of ['results', 'recorded']) fs.rmSync(path.join(stateDir, dir), { recursive: true, force: true });
   fs.writeFileSync(path.join(stateDir, 'progress.json'), `${JSON.stringify(progress, null, 2)}\n`);
 
   const c = progress.counts;
