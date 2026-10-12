@@ -11,6 +11,7 @@
 //   node .claude/scripts/octocheck-site.cjs check  --site <name> [--profile developer|bot]
 //   node .claude/scripts/octocheck-site.cjs list
 //   node .claude/scripts/octocheck-site.cjs fetch  --site <name> [--profile developer|bot] [--blast-radius <n|off>]
+//   node .claude/scripts/octocheck-site.cjs tasks  --site <name>
 //
 // `setup` and `rotate` ask for the key and secret with a hidden prompt, so run them in a
 // normal terminal, NOT inside Claude Code. No dependencies; works on Node 16 and later.
@@ -546,6 +547,8 @@ const USAGE = `OctoCheck site script
   fetch  --site <name> [--profile developer|bot] [--blast-radius <n|off>]
                                                                      get the scripts that need review
                                                                      (see octocheck-fetch.cjs)
+  tasks  --site <name>                                               group the fetched scripts into review tasks
+                                                                     (see octocheck-tasks.cjs)
 
 Run setup and rotate in a normal terminal, not inside Claude Code.`;
 
@@ -588,6 +591,7 @@ async function main(argv, ctxOverrides = {}) {
     else if (command === 'check') await runCheck(flags, ctx);
     else if (command === 'list') runList(ctx);
     else if (command === 'fetch') await require('./octocheck-fetch.cjs').runFetch(flags, ctx);
+    else if (command === 'tasks') await require('./octocheck-tasks.cjs').runTasks(flags, ctx);
     else throw new UserError(`Unknown command: ${command}\n\n${USAGE}`);
     return 0;
   } catch (e) {

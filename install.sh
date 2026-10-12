@@ -30,10 +30,13 @@ cp -v "$SOURCE_DIR/.claude/hooks/block-credentials-read.cjs" "$TARGET_DIR/.claud
 cp -v "$SOURCE_DIR/.claude/scripts/octocheck-site.cjs" "$TARGET_DIR/.claude/scripts/"
 cp -v "$SOURCE_DIR/.claude/scripts/octocheck-fetch.cjs" "$TARGET_DIR/.claude/scripts/"
 cp -v "$SOURCE_DIR/.claude/scripts/octocheck-schema.cjs" "$TARGET_DIR/.claude/scripts/"
+cp -v "$SOURCE_DIR/.claude/scripts/octocheck-tasks.cjs" "$TARGET_DIR/.claude/scripts/"
+cp -v "$SOURCE_DIR/.claude/scripts/octocheck-rules.cjs" "$TARGET_DIR/.claude/scripts/"
 cp -v "$SOURCE_DIR/.claude/scripts/bundle_schema_v1.json" "$TARGET_DIR/.claude/scripts/"
 
 mkdir -p "$TARGET_DIR/rules"
 cp -v "$SOURCE_DIR/rules/rules.core.yaml" "$TARGET_DIR/rules/"
+cp -v "$SOURCE_DIR/rules/rules.ui-scripts.yaml" "$TARGET_DIR/rules/"
 
 if [ ! -f "$TARGET_DIR/rules.local.yaml" ]; then
   cp -v "$SOURCE_DIR/rules/rules.local.yaml.example" "$TARGET_DIR/rules.local.yaml"

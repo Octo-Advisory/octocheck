@@ -8,6 +8,11 @@ review_expiry_days: 19
 # If one change would pull in more than this many other files for a contract check, ask first.
 blast_radius_limit: 25
 
+# Site review only: the most scripts one review task covers. Scripts on the same DocType and event
+# (or the same DocType and view, for Client Scripts) are reviewed together; a bigger group is split
+# into parts of this size, in script-name order. Counts scripts, not text size.
+group_size_cap: 5
+
 # Files OctoCheck never reviews: nothing in them to check, so reading them only costs tokens.
 # This list replaces the built-in default if you set it, so keep the lines you still want.
 # Empty files are always skipped automatically. Note: requirements.txt, package.json and

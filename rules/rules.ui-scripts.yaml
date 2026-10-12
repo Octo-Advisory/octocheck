@@ -1,0 +1,49 @@
+# OctoCheck UI-script rules: Server Scripts and Client Scripts read from a Frappe site.
+# version: 0.1.0-draft
+# DRAFT: written from the team-review document "OctoCheck UI Script Rules". Reviewer changes come back
+# as edits to THIS file only; the review loop itself does not change. Bump the version on every edit.
+# Same format as rules.core.yaml, plus one field:
+#   applies: server | client | both   which kind of script the rule is checked on
+# Rule IDs keep the numbers used in the review document (UI-01 ... UI-27, UI-C-01 ... UI-C-04). They do
+# NOT encode the factor, so the report files each flag under the `factor` field of its rule.
+# Factor 4 (Test cases) has no rules here: tests do not apply to UI scripts. The report states that once.
+# Factor C (Contract impact) is checked only on scripts pulled in as linked neighbours of a changed script.
+# Severity is fixed per rule and is never raised or lowered by the reviewer.
+# engine is always "llm": no static tooling is used.
+
+- { id: UI-01, stack: ui-script, factor: 1, factor_name: "Comments", applies: both, description: "No header comment stating the script's purpose", severity: low, engine: llm }
+- { id: UI-02, stack: ui-script, factor: 1, factor_name: "Comments", applies: both, description: "Non-obvious logic (business rules, magic numbers, workarounds) has no reason given", severity: low, engine: llm }
+- { id: UI-03, stack: ui-script, factor: 1, factor_name: "Comments", applies: both, description: "Commented-out code, or comments that no longer match the logic", severity: low, engine: llm }
+
+- { id: UI-04, stack: ui-script, factor: 2, factor_name: "Casing", applies: both, description: "Script name does not follow one agreed convention across the site", severity: low, engine: llm }
+- { id: UI-05, stack: ui-script, factor: 2, factor_name: "Casing", applies: server, description: "Python variables and functions not in snake_case", severity: low, engine: llm }
+- { id: UI-06, stack: ui-script, factor: 2, factor_name: "Casing", applies: client, description: "JS variables and functions not in camelCase, or field names not matching the DocType's snake_case fieldnames", severity: low, engine: llm }
+
+- { id: UI-07, stack: ui-script, factor: 3, factor_name: "Dynamic paths", applies: both, description: "Credentials, API keys, tokens or passwords in script text", severity: high, engine: llm }
+- { id: UI-08, stack: ui-script, factor: 3, factor_name: "Dynamic paths", applies: both, description: "Hard-coded hosts, URLs, email addresses or phone numbers; these belong in Site Config or a Settings DocType", severity: medium, engine: llm }
+- { id: UI-09, stack: ui-script, factor: 3, factor_name: "Dynamic paths", applies: both, description: "Hard-coded record names (company, warehouse, user) where a setting or lookup should be used", severity: medium, engine: llm }
+
+- { id: UI-11, stack: ui-script, factor: 5, factor_name: "Edge cases", applies: server, description: "A get_value or get_doc result is used with no None or not-found check", severity: medium, engine: llm }
+- { id: UI-12, stack: ui-script, factor: 5, factor_name: "Edge cases", applies: both, description: "Child tables or document fields used with no empty or null handling", severity: medium, engine: llm }
+- { id: UI-13, stack: ui-script, factor: 5, factor_name: "Edge cases", applies: client, description: "frm.doc fields used before they are set, or frappe.call with no failure handling", severity: medium, engine: llm }
+- { id: UI-14, stack: ui-script, factor: 5, factor_name: "Edge cases", applies: server, description: "An API script reads frappe.form_dict input with no validation", severity: high, engine: llm }
+- { id: UI-15, stack: ui-script, factor: 5, factor_name: "Edge cases", applies: server, description: "SQL built with string formatting or concatenation instead of parameters", severity: high, engine: llm }
+- { id: UI-16, stack: ui-script, factor: 5, factor_name: "Edge cases", applies: server, description: "A DocType Event script calls doc.save() on its own document, so it can re-trigger itself", severity: high, engine: llm }
+
+- { id: UI-17, stack: ui-script, factor: 6, factor_name: "Org standards", applies: server, description: "An API script has Allow Guest on with no clear need or no input checks", severity: high, engine: llm }
+- { id: UI-18, stack: ui-script, factor: 6, factor_name: "Org standards", applies: server, description: "frappe.db.commit() inside a DocType Event script", severity: high, engine: llm }
+- { id: UI-19, stack: ui-script, factor: 6, factor_name: "Org standards", applies: server, description: "A Permission Query script returns SQL without escaping values", severity: medium, engine: llm }
+- { id: UI-20, stack: ui-script, factor: 6, factor_name: "Org standards", applies: both, description: "User-facing messages not wrapped for translation", severity: low, engine: llm }
+- { id: UI-21, stack: ui-script, factor: 6, factor_name: "Org standards", applies: client, description: "Deprecated patterns such as cur_frm", severity: low, engine: llm }
+- { id: UI-22, stack: ui-script, factor: 6, factor_name: "Org standards", applies: both, description: "A Scheduler script runs more often than its job needs, or has no stated reason for its frequency", severity: low, engine: llm }
+- { id: UI-23, stack: ui-script, factor: 6, factor_name: "Org standards", applies: both, description: "The script is disabled, so it is dead code", severity: low, engine: llm }
+
+- { id: UI-24, stack: ui-script, factor: 7, factor_name: "Optimize", applies: server, description: "A database query inside a loop", severity: medium, engine: llm }
+- { id: UI-25, stack: ui-script, factor: 7, factor_name: "Optimize", applies: server, description: "get_doc used to read a single field where get_value is enough", severity: low, engine: llm }
+- { id: UI-26, stack: ui-script, factor: 7, factor_name: "Optimize", applies: client, description: "frappe.call fired on every field change with no guard", severity: low, engine: llm }
+- { id: UI-27, stack: ui-script, factor: 7, factor_name: "Optimize", applies: both, description: "Unused variables, redundant conditions, or repeated identical queries", severity: low, engine: llm }
+
+- { id: UI-C-01, stack: ui-script, factor: C, factor_name: "Contract impact", applies: both, description: "A client frappe.call sends arguments the API script does not read, or relies on a response shape the API script does not return", severity: high, engine: llm }
+- { id: UI-C-02, stack: ui-script, factor: C, factor_name: "Contract impact", applies: server, description: "Two scripts on the same DocType and event write the same field with conflicting values", severity: high, engine: llm }
+- { id: UI-C-03, stack: ui-script, factor: C, factor_name: "Contract impact", applies: server, description: "A save in one script triggers another script that saves back, creating a loop", severity: high, engine: llm }
+- { id: UI-C-04, stack: ui-script, factor: C, factor_name: "Contract impact", applies: both, description: "A shared field is renamed or removed in one script while a linked script still uses the old name", severity: medium, engine: llm }

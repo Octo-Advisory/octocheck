@@ -41,8 +41,11 @@ copyFile('.claude/hooks/block-credentials-read.cjs', '.claude/hooks/block-creden
 copyFile('.claude/scripts/octocheck-site.cjs', '.claude/scripts/octocheck-site.cjs');
 copyFile('.claude/scripts/octocheck-fetch.cjs', '.claude/scripts/octocheck-fetch.cjs');
 copyFile('.claude/scripts/octocheck-schema.cjs', '.claude/scripts/octocheck-schema.cjs');
+copyFile('.claude/scripts/octocheck-tasks.cjs', '.claude/scripts/octocheck-tasks.cjs');
+copyFile('.claude/scripts/octocheck-rules.cjs', '.claude/scripts/octocheck-rules.cjs');
 copyFile('.claude/scripts/bundle_schema_v1.json', '.claude/scripts/bundle_schema_v1.json');
 copyFile('rules/rules.core.yaml', 'rules/rules.core.yaml');
+copyFile('rules/rules.ui-scripts.yaml', 'rules/rules.ui-scripts.yaml');
 
 const localRulesTarget = path.join(targetDir, 'rules.local.yaml');
 if (!fs.existsSync(localRulesTarget)) {
