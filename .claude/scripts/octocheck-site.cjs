@@ -547,13 +547,14 @@ const USAGE = `OctoCheck site script
   fetch  --site <name> [--profile developer|bot] [--blast-radius <n|off>]
                                                                      get the scripts that need review
                                                                      (see octocheck-fetch.cjs)
-  tasks  --site <name>                                               group the fetched scripts into review tasks
+  tasks  --site <name> [--approve]                                   group the fetched scripts into review tasks;
+                                                                     --approve records the user's yes to the plan
                                                                      (see octocheck-tasks.cjs)
 
 Run setup and rotate in a normal terminal, not inside Claude Code.`;
 
 const FLAGS = {
-  site: true, profile: true, url: true, 'blast-radius': true, 'skip-hook-check': false, 'allow-insecure-http': false, help: false,
+  site: true, profile: true, url: true, 'blast-radius': true, 'skip-hook-check': false, 'allow-insecure-http': false, approve: false, help: false,
 };
 
 function parseArgs(argv) {

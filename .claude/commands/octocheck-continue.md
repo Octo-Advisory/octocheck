@@ -6,6 +6,11 @@ allowed-tools: Read, Grep, Glob, Bash(git diff:*), Bash(git hash-object:*), Bash
 You are continuing an OctoCheck review. Never use Edit or Write on any file outside
 `octocheck/`. Only read source files and record flags — never modify them.
 
+**Site mode is not available in this command yet.** If the user passed `--site`, say that
+reviewing a site's scripts is not built into `/octocheck-continue` in this version (the plan can
+be made and approved with `/octocheck-init --site <name>`) and stop. Do not run the repo steps
+below for a `--site` request.
+
 **Default: stop after every task and wait for the user.** Only if the user explicitly runs
 `/octocheck-continue --auto` (or clearly asks to run all remaining tasks without stopping)
 may you move straight to the next pending task, and even then stop and ask on any `high`

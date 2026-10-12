@@ -3,7 +3,8 @@
 // No AI and no network. Claude reads the result; it never builds the groups itself, so the split
 // is the same every run and can be tested.
 //
-//   node .claude/scripts/octocheck-site.cjs tasks --site <name>
+//   node .claude/scripts/octocheck-site.cjs tasks --site <name>            build the tasks (approved: false)
+//   node .claude/scripts/octocheck-site.cjs tasks --site <name> --approve  record the user's yes
 //
 // Grouping (decisions 7a):
 //   Server Script, type DocType Event  -> one group per DocType + event      (ToDo / Before Save)
@@ -23,6 +24,7 @@
 const fs = require('fs');
 const path = require('path');
 const site = require('./octocheck-site.cjs');
+const { parseRules, RulesError } = require('./octocheck-rules.cjs');
 const { readLimit, stateDirFor, clean } = require('./octocheck-fetch.cjs');
 
 const { UserError } = site;
@@ -95,8 +97,47 @@ function chunkInto(items, metaOf, cap, type, makeRow) {
   return tasks;
 }
 
+const UI_RULES_FILE = 'rules/rules.ui-scripts.yaml';
+
+/**
+ * Which rules this project will use: the UI rules, minus any the project disabled in
+ * rules.local.yaml, plus any team rules it added for the ui-script stack. A disabled rule is
+ * listed, never silently dropped. Team rules may not reuse the reserved factors (1-7 and C).
+ */
+function readRuleSet(cwd) {
+  const read = (file) => { try { return fs.readFileSync(path.join(cwd, file), 'utf8'); } catch (e) { return null; } };
+  const parse = (file, text) => {
+    try { return parseRules(text); } catch (e) {
+      if (e instanceof RulesError) throw new UserError(`${file}: ${e.message}`);
+      throw e;
+    }
+  };
+  const coreText = read(UI_RULES_FILE);
+  if (coreText === null) throw new UserError(`${UI_RULES_FILE} is missing. Install OctoCheck again.`);
+  const core = parse(UI_RULES_FILE, coreText);
+  const ids = new Set(core.rules.map((r) => r.id));
+  const out = { file: UI_RULES_FILE, version: core.version, review_rules: 0, contract_checks: 0, disabled: [], team_added: [], team_discarded: [] };
+  const localText = read('rules.local.yaml');
+  if (localText !== null) {
+    for (const r of parse('rules.local.yaml', localText).rules) {
+      if (r.disabled === true) {
+        if (ids.has(r.id)) out.disabled.push(r.id);
+      } else if (r.stack === 'ui-script') {
+        const reserved = r.factor === 'C' || (Number.isInteger(r.factor) && r.factor >= 1 && r.factor <= 7);
+        (reserved ? out.team_discarded : out.team_added).push(r.id);
+      }
+    }
+  }
+  for (const r of core.rules) {
+    if (out.disabled.includes(r.id)) continue;
+    if (r.factor === 'C') out.contract_checks += 1; else out.review_rules += 1;
+  }
+  out.team_rules = out.team_added.length;
+  return out;
+}
+
 /** Build progress.json from plan.json and manifest.json. Pure: no files are touched. */
-function buildProgress({ plan, manifest, cap, now }) {
+function buildProgress({ plan, manifest, cap, now, rules }) {
   const warnings = [];
   const seen = new Map();
   const metaOf = (item) => {
@@ -118,6 +159,7 @@ function buildProgress({ plan, manifest, cap, now }) {
     mode: 'site', site: plan.site, plan_fetched_at: plan.fetched_at, approved: false,
     run_report_file: `octocheck/reports/report-${stamp(now)}.md`,
     group_size_cap: cap,
+    rules: rules || null,
     counts: { tasks: tasks.length, review_tasks: review.length, contract_tasks: contract.length, review_scripts: count('review'), contract_scripts: count('contract') },
     tasks,
     removed: plan.removed || [], unavailable: plan.unavailable || [],
@@ -126,29 +168,57 @@ function buildProgress({ plan, manifest, cap, now }) {
   };
 }
 
-function readRequired(file, what) {
+function readRequired(file, what, fix = 'fetch') {
   let text;
   try { text = fs.readFileSync(file, 'utf8'); } catch (e) {
-    throw new UserError(`${what} is missing. Run fetch for this site first.`);
+    throw new UserError(`${what} is missing. Run ${fix} for this site first.`);
   }
   try { return JSON.parse(text); } catch (e) {
-    throw new UserError(`${what} could not be read. Run fetch again to rebuild it.`);
+    throw new UserError(`${what} could not be read. Run ${fix} again to rebuild it.`);
   }
+}
+
+/** Record the user's yes. Refuses when the plan changed since the tasks were built, so a yes can
+ *  never be applied to a task list the user did not see. */
+function approveTasks(flags, ctx) {
+  const { io, cwd } = ctx;
+  const stateDir = stateDirFor(cwd, flags.site);
+  const progressFile = path.join(stateDir, 'progress.json');
+  const plan = readRequired(path.join(stateDir, 'plan.json'), 'plan.json');
+  const progress = readRequired(progressFile, 'progress.json', 'tasks');
+  if (progress.mode !== 'site' || !Array.isArray(progress.tasks)) throw new UserError('progress.json is not a site plan. Run tasks again.');
+  if (progress.plan_fetched_at !== plan.fetched_at) {
+    throw new UserError('The site was fetched again after these tasks were built, so the plan you saw is out of date. Run tasks again and approve the new plan.');
+  }
+  if (progress.tasks.length === 0) throw new UserError('There are no tasks, so there is nothing to approve.');
+  if (progress.approved === true) {
+    io.out(`${flags.site}: this plan was already approved. Nothing changed.`);
+    return progress;
+  }
+  progress.approved = true;
+  progress.approved_at = (ctx.now ? ctx.now() : new Date()).toISOString();
+  fs.writeFileSync(progressFile, `${JSON.stringify(progress, null, 2)}\n`);
+  io.out(`${flags.site}: plan approved (${progress.tasks.length} task${progress.tasks.length === 1 ? '' : 's'}). Next: /octocheck-continue --site ${flags.site}`);
+  return progress;
 }
 
 async function runTasks(flags, ctx) {
   const { io, cwd } = ctx;
   site.checkSiteName(flags.site);
+  if (flags.approve) return approveTasks(flags, ctx);
   const stateDir = stateDirFor(cwd, flags.site);
   const plan = readRequired(path.join(stateDir, 'plan.json'), 'plan.json');
   const manifest = readRequired(path.join(stateDir, 'manifest.json'), 'manifest.json');
   if (plan.plan_version !== 1) throw new UserError(`plan.json is version ${plan.plan_version}; this OctoCheck understands version 1. Update OctoCheck or run fetch again.`);
-  const progress = buildProgress({ plan, manifest, cap: readGroupCap(cwd), now: ctx.now ? ctx.now() : new Date() });
+  const rules = readRuleSet(cwd);
+  const progress = buildProgress({ plan, manifest, cap: readGroupCap(cwd), now: ctx.now ? ctx.now() : new Date(), rules });
   fs.writeFileSync(path.join(stateDir, 'progress.json'), `${JSON.stringify(progress, null, 2)}\n`);
 
   const c = progress.counts;
   io.out(`${flags.site}: ${c.tasks} task${c.tasks === 1 ? '' : 's'} (${c.review_tasks} review covering ${c.review_scripts} script${c.review_scripts === 1 ? '' : 's'}, ${c.contract_tasks} contract covering ${c.contract_scripts}).`);
   io.out(`Group size cap: ${progress.group_size_cap > 0 ? `${progress.group_size_cap} scripts per task` : 'off'}.`);
+  io.out(`Rules: ${rules.file} v${rules.version}: ${rules.review_rules} review rules, ${rules.contract_checks} contract checks, ${rules.team_rules} team rule${rules.team_rules === 1 ? '' : 's'}; disabled for this project: ${rules.disabled.length ? rules.disabled.join(', ') : 'none'}.`);
+  if (rules.team_discarded.length) io.out(`Note: team rule${rules.team_discarded.length === 1 ? '' : 's'} ${rules.team_discarded.join(', ')} ignored: factors 1-7 and C are reserved for the core rules.`);
   for (const t of progress.tasks) io.out(`  ${t.id}. [${t.type}] ${t.name}: ${t.scripts.length} script${t.scripts.length === 1 ? '' : 's'}`);
   for (const r of progress.removed.slice(0, 20)) io.out(`Removed since the last review: ${clean(r.name)}`);
   for (const n of progress.notes) io.out(`Note: ${n}`);
@@ -157,4 +227,4 @@ async function runTasks(flags, ctx) {
   return progress;
 }
 
-module.exports = { runTasks, buildProgress, groupOf, readGroupCap, stamp, DEFAULT_GROUP_CAP };
+module.exports = { runTasks, approveTasks, buildProgress, groupOf, readGroupCap, readRuleSet, stamp, DEFAULT_GROUP_CAP };
