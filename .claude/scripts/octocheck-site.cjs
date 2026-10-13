@@ -6,6 +6,7 @@
 // this process and never appears in the conversation, in a prompt, or in a report. Claude
 // only ever sees the short summaries this script prints.
 //
+//   node .claude/scripts/octocheck-site.cjs connect --url <address> [--site <name>]   (browser approval; /octocheck-connect runs it)
 //   node .claude/scripts/octocheck-site.cjs setup  --site <name> [--profile developer|bot]
 //   node .claude/scripts/octocheck-site.cjs rotate --site <name> [--profile developer|bot]
 //   node .claude/scripts/octocheck-site.cjs check  --site <name> [--profile developer|bot]
@@ -13,8 +14,11 @@
 //   node .claude/scripts/octocheck-site.cjs fetch  --site <name> [--profile developer|bot] [--blast-radius <n|off>]
 //   node .claude/scripts/octocheck-site.cjs tasks  --site <name>
 //
-// `setup` and `rotate` ask for the key and secret with a hidden prompt, so run them in a
-// normal terminal, NOT inside Claude Code. No dependencies; works on Node 16 and later.
+// `connect` needs no key at all: it opens the site in the browser, the person clicks Approve, and the
+// site hands this computer its own token through a redirect to 127.0.0.1 (connector 0.1.1+). The
+// token is saved like a secret and never printed, so it is safe to run inside Claude Code.
+// `setup` and `rotate` (the API key fallback) ask for the key and secret with a hidden prompt, so run
+// them in a normal terminal, NOT inside Claude Code. No dependencies; works on Node 16 and later.
 
 const fs = require('fs');
 const os = require('os');
@@ -32,6 +36,11 @@ const REQUEST_TIMEOUT_MS = 15000;
 const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 const KEY_MAX_AGE_DAYS = 90;
 const USER_AGENT = 'octocheck-site/0.1';
+// A browser connection is stored as key CONNECTION_KEY with the token as its secret, so every caller
+// passes it around exactly like a key and secret; only the Authorization header differs.
+const CONNECTION_KEY = 'octocheck-connection';
+const CONNECT_TIMEOUT_MS = 5 * 60 * 1000;
+const CONNECT_PATH = '/octocheck-connect';
 
 class UserError extends Error {}
 
@@ -43,7 +52,12 @@ function mask(text, secrets = []) {
   for (const s of secrets) {
     if (s && String(s).length >= 4) out = out.split(String(s)).join('••••');
   }
-  return out.replace(/token\s+\S+/gi, 'token ••••');
+  return out.replace(/token\s+\S+/gi, 'token ••••').replace(/OctoCheck\s+[A-Za-z0-9_-]{20,}/g, 'OctoCheck ••••');
+}
+
+/** The Authorization header for a saved key and secret, or for a browser connection. */
+function authHeader(key, secret) {
+  return key === CONNECTION_KEY ? `OctoCheck ${secret}` : `token ${key}:${secret}`;
 }
 
 function credentialsDir(env, home) {
@@ -163,7 +177,7 @@ async function callEndpoint(origin, endpoint, query, key, secret, opts = {}) {
   let url = `${origin}${API_PREFIX}${endpoint}`;
   const params = new URLSearchParams(query || {}).toString();
   if (params) url += `?${params}`;
-  const headers = { Authorization: `token ${key}:${secret}`, Accept: 'application/json', 'User-Agent': USER_AGENT };
+  const headers = { Authorization: authHeader(key, secret), Accept: 'application/json', 'User-Agent': USER_AGENT };
 
   for (let attempt = 0; ; attempt += 1) {
     let res;
@@ -179,11 +193,11 @@ async function callEndpoint(origin, endpoint, query, key, secret, opts = {}) {
       await sleep(seconds * 1000);
       continue;
     }
-    return interpret(res, origin);
+    return interpret(res, origin, key === CONNECTION_KEY);
   }
 }
 
-function interpret(res, origin) {
+function interpret(res, origin, viaConnection = false) {
   const detail = serverMessage(res.body);
   if (res.status >= 300 && res.status < 400) {
     // Never follow a redirect: it could carry the secret to another host.
@@ -192,7 +206,12 @@ function interpret(res, origin) {
       'Use the final address instead, for example https:// instead of http://.'
     );
   }
-  if (res.status === 401) throw new UserError('The site rejected this key and secret (401). Nothing was saved.');
+  if (res.status === 401) {
+    if (viaConnection) {
+      throw new UserError('The site no longer accepts this computer\'s connection (401): it was removed under OctoCheck Connection, it expired, or the user was disabled. Run /octocheck-connect again.');
+    }
+    throw new UserError('The site rejected this key and secret (401). Nothing was saved.');
+  }
   if (res.status === 403) {
     if (/disabled/i.test(detail)) {
       throw new UserError('The connector is switched off on that site. Tick "Enable connector" in OctoCheck Settings.');
@@ -318,10 +337,15 @@ function hookRegistered(cwd, home) {
 /** For the fetch step: credentials for one site and profile, or an error that says how to fix it. */
 function loadCredentials(site, profile, env = process.env, home = os.homedir()) {
   const entry = (readStore(credentialsDir(env, home)).sites[site] || {})[profile];
+  if (entry && entry.kind === 'connection' && entry.token) {
+    return { ...entry, key: CONNECTION_KEY, secret: entry.token };
+  }
   if (!entry || !entry.key || !entry.secret) {
     throw new UserError(
-      `No ${profile} credentials saved for "${site}". In a terminal, run: ` +
-      `node .claude/scripts/octocheck-site.cjs setup --site ${site}${profile === 'developer' ? '' : ` --profile ${profile}`}`
+      `No ${profile} credentials saved for "${site}". ` +
+      (profile === 'developer'
+        ? `In Claude Code, run /octocheck-connect and approve it in your browser (or, in a terminal: node .claude/scripts/octocheck-site.cjs setup --site ${site}).`
+        : `In a terminal, run: node .claude/scripts/octocheck-site.cjs setup --site ${site} --profile ${profile}`)
     );
   }
   return entry;
@@ -511,6 +535,10 @@ async function runCheck(flags, ctx) {
     throw new UserError(mask(e.message, [creds.key, creds.secret]));
   }
   io.out(describe(info));
+  if (creds.kind === 'connection') {
+    io.out(`Connected in the browser on ${String(creds.saved_at).slice(0, 10)}${creds.expires_on ? `; the connection expires on ${String(creds.expires_on).slice(0, 10)}` : ''}. Run /octocheck-connect again any time to renew it.`);
+    return;
+  }
   const ageDays = Math.floor(((ctx.now ? ctx.now() : new Date()) - new Date(creds.saved_at)) / 86400000);
   if (Number.isFinite(ageDays) && ageDays > KEY_MAX_AGE_DAYS) {
     io.out(`This ${profile} key was saved ${ageDays} days ago. Consider rotating it: rotate --site ${site}${profile === 'developer' ? '' : ` --profile ${profile}`}`);
@@ -523,7 +551,7 @@ function runList(ctx) {
   const store = readStore(credentialsDir(env, home));
   const names = [...new Set([...Object.keys(sites), ...Object.keys(store.sites)])].sort();
   if (!names.length) {
-    io.out('No sites yet. Run: node .claude/scripts/octocheck-site.cjs setup --site <name>');
+    io.out('No sites yet. In Claude Code, run /octocheck-connect (or, in a terminal: node .claude/scripts/octocheck-site.cjs setup --site <name>).');
     return;
   }
   for (const name of names) {
@@ -531,8 +559,164 @@ function runList(ctx) {
     const profiles = store.sites[name] || {};
     for (const p of PROFILES) {
       const c = profiles[p];
-      io.out(`  ${p}: ${c ? `saved ${String(c.saved_at).slice(0, 10)} for ${c.user} (${c.mode})` : 'no key saved'}`);
+      const what = c && c.kind === 'connection'
+        ? `connected in the browser ${String(c.saved_at).slice(0, 10)} as ${c.user} (${c.mode})${c.expires_on ? `, expires ${String(c.expires_on).slice(0, 10)}` : ''}`
+        : c ? `saved ${String(c.saved_at).slice(0, 10)} for ${c.user} (${c.mode})` : 'no key saved';
+      io.out(`  ${p}: ${what}`);
     }
+  }
+}
+
+// --- connect: approve this computer in the browser ---------------------------
+
+const isWsl = (platform, env) => platform === 'linux' && Boolean(env.WSL_DISTRO_NAME || /microsoft/i.test(os.release()));
+
+/** Open a link in the default browser. No shell is involved, so nothing in the link is interpreted. */
+function openBrowser(url, platform = process.platform, env = process.env) {
+  const { spawn } = require('child_process');
+  let cmd = 'xdg-open';
+  let args = [url];
+  if (platform === 'win32') { cmd = 'rundll32'; args = ['url.dll,FileProtocolHandler', url]; }
+  else if (isWsl(platform, env)) { cmd = 'rundll32.exe'; args = ['url.dll,FileProtocolHandler', url]; }
+  else if (platform === 'darwin') { cmd = 'open'; }
+  try {
+    const child = spawn(cmd, args, { detached: true, stdio: 'ignore' });
+    child.on('error', () => {});
+    child.unref();
+  } catch (e) { /* the link is printed too */ }
+}
+
+/** A site name from an address: deverp.heerugroup.in -> deverp-heerugroup, localhost:88 -> localhost-88. */
+function suggestSiteName(origin) {
+  const u = new URL(origin);
+  let labels = u.hostname.replace(/^\[|\]$/g, '').split('.').filter(Boolean);
+  if (/^\d+(\.\d+){3}$/.test(u.hostname)) { /* an IP address: keep every part */ }
+  else if (labels.length > 2) labels = labels.slice(0, -1);
+  else if (labels.length === 2 && !['localhost', 'local', 'test'].includes(labels[1])) labels = labels.slice(0, 1);
+  let name = labels.join('-').replace(/[^A-Za-z0-9._-]/g, '-').replace(/^[^A-Za-z0-9]+/, '') || 'site';
+  if (u.port) name += `-${u.port}`;
+  return name.slice(0, 60);
+}
+
+const page = (title, text) => `<!doctype html><meta charset="utf-8"><title>${title}</title>` +
+  `<body style="font-family: system-ui, sans-serif; max-width: 520px; margin: 60px auto; line-height: 1.5">` +
+  `<h2>${title}</h2><p>${text}</p></body>`;
+
+/** Listen on 127.0.0.1 for the browser's answer. Resolves with {token, user, expires_on}. */
+function waitForApproval(state, timeoutMs) {
+  const crypto = require('crypto');
+  const expected = Buffer.from(state);
+  let server;
+  let timer;
+  const answer = new Promise((resolve, reject) => {
+    server = http.createServer((req, res) => {
+      const u = new URL(req.url, 'http://127.0.0.1');
+      const send = (status, title, text) => { res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(page(title, text)); };
+      if (req.method !== 'GET' || u.pathname !== '/callback') return send(404, 'Not found', 'This address is only used by OctoCheck while connecting.');
+      const got = Buffer.from(String(u.searchParams.get('state') || ''));
+      if (got.length !== expected.length || !crypto.timingSafeEqual(got, expected)) {
+        // Not the answer to this request (another tab, an old link, or someone guessing): keep waiting.
+        return send(400, 'Not this request', 'This answer does not match the connection OctoCheck is waiting for. Start again from Claude Code with /octocheck-connect.');
+      }
+      if (u.searchParams.get('error')) {
+        send(200, 'Not connected', 'You chose Deny, so nothing was saved. You can close this tab.');
+        return reject(new UserError('You chose Deny in the browser, so nothing was saved.'));
+      }
+      const token = String(u.searchParams.get('token') || '');
+      if (!/^[A-Za-z0-9_-]{20,200}$/.test(token)) {
+        send(400, 'Something went wrong', 'The site did not send a usable connection. Start again from Claude Code with /octocheck-connect.');
+        return reject(new UserError('The site did not send a usable connection, so nothing was saved. Is octocheck_connector 0.1.1 or later installed?'));
+      }
+      send(200, 'OctoCheck is connected', 'You can close this tab and go back to Claude Code.');
+      return resolve({ token, user: u.searchParams.get('user') || null, expires_on: u.searchParams.get('expires_on') || null });
+    });
+    server.on('error', (e) => reject(new UserError(`Could not listen on 127.0.0.1 for the browser's answer: ${e.message}`)));
+    timer = setTimeout(() => reject(new UserError(`No answer from the browser within ${Math.round(timeoutMs / 60000)} minutes, so nothing was saved. Run /octocheck-connect again when you are ready to click Approve.`)), timeoutMs);
+  });
+  const listening = new Promise((resolve, reject) => {
+    server.listen(0, '127.0.0.1', () => resolve(server.address().port));
+    server.once('error', reject);
+  });
+  const close = () => { clearTimeout(timer); server.close(); };
+  return { listening, answer, close };
+}
+
+async function runConnect(flags, ctx) {
+  const { io, cwd, env, home } = ctx;
+  const doGet = ctx.httpGet || httpGet;
+  const now = ctx.now ? ctx.now() : new Date();
+  const sites = readSites(cwd);
+  if (flags.site) checkSiteName(flags.site);
+  const rawUrl = flags.url || (flags.site && sites[flags.site] && sites[flags.site].url);
+  if (!rawUrl) throw new UserError('Add the site address, for example: connect --url https://erp.example.com');
+  const { origin, note } = checkUrl(rawUrl, flags['allow-insecure-http']);
+  if (note) io.err(note);
+
+  if (!hookRegistered(cwd, home)) {
+    let fixed = false;
+    try {
+      const hooks = require('./octocheck-hooks.cjs');
+      if (fs.existsSync(path.join(cwd, '.claude', 'settings.hooks.json'))) fixed = hooks.ensureHooks(cwd, cwd).status !== 'unreadable';
+    } catch (e) { /* explained below */ }
+    throw new UserError(fixed
+      ? 'The credentials guard was not registered, so it has now been added to .claude/settings.json. Claude Code loads hooks only when it starts: exit Claude Code, start it again in this folder, then run /octocheck-connect again. Nothing was saved.'
+      : `The credentials guard is not registered. Run the OctoCheck installer again in this folder (npx github:Octo-Advisory/octocheck), restart Claude Code, then run /octocheck-connect again. Without it, Claude could read the saved connection. Nothing was saved.`);
+  }
+
+  let site = flags.site;
+  if (!site) {
+    const existing = Object.entries(sites).find(([, v]) => { try { return checkUrl(v.url, true).origin === origin; } catch (e) { return false; } });
+    site = existing ? existing[0] : suggestSiteName(origin);
+  }
+  checkSiteName(site);
+  if (sites[site] && checkUrl(sites[site].url, true).origin !== origin) {
+    throw new UserError(`${SITES_FILE} already has a different address for "${site}" (${sites[site].url}). Choose another name with --site, or edit that file if the address really changed.`);
+  }
+  const dir = credentialsDir(env, home);
+  for (const w of checkStoragePlace(dir, ctx.platform)) io.err(w);
+  const store = readStore(dir);
+
+  const crypto = require('crypto');
+  const state = crypto.randomBytes(24).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const wait = (ctx.waitForApproval || waitForApproval)(state, ctx.connectTimeoutMs || CONNECT_TIMEOUT_MS);
+  let token;
+  let secrets = [];
+  try {
+    const port = await wait.listening;
+    const device = `${os.hostname()}${isWsl(ctx.platform || process.platform, env) ? ' (WSL)' : ''}`;
+    const link = `${origin}${CONNECT_PATH}?${new URLSearchParams({ port: String(port), state, device }).toString()}`;
+    io.out(`Opening ${origin} in your browser. Log in if asked, then click Approve.`);
+    io.out(`If the browser does not open, open this link yourself: ${link}`);
+    if (!flags['no-browser']) (ctx.openBrowser || openBrowser)(link, ctx.platform || process.platform, env);
+    const got = await wait.answer;
+    token = got.token;
+    secrets = [token];
+    // Check first, save second: a connection that does not work is never saved.
+    let info;
+    try {
+      info = await getInfo(origin, CONNECTION_KEY, token, doGet);
+    } catch (e) {
+      throw new UserError(`${mask(e.message, secrets)} Nothing was saved.`);
+    }
+    store.sites[site] = store.sites[site] || {};
+    const replacedKey = Boolean(store.sites[site].developer && store.sites[site].developer.kind !== 'connection');
+    store.sites[site].developer = {
+      kind: 'connection', token, user: info.user, mode: info.access_mode, saved_at: now.toISOString(), expires_on: got.expires_on || null,
+    };
+    writeStore(dir, store);
+    if (!sites[site]) {
+      sites[site] = { url: origin };
+      writeSites(cwd, sites);
+    }
+    io.out(describe(info));
+    if (replacedKey) io.out('This connection replaces the API key that was saved for this site on this computer.');
+    io.out(`Connected this computer to ${origin} as site "${site}"${got.expires_on ? ` until ${String(got.expires_on).slice(0, 10)}` : ''}. The connection is saved outside this repo; remove it any time on the site under OctoCheck Connection.`);
+    io.out(`Next: /octocheck-init --site ${site}`);
+  } catch (e) {
+    if (e instanceof UserError) throw new UserError(mask(e.message, secrets));
+    throw e;
+  } finally {
+    wait.close();
   }
 }
 
@@ -540,7 +724,9 @@ function runList(ctx) {
 
 const USAGE = `OctoCheck site script
 
-  setup  --site <name> [--profile developer|bot] [--url <address>]   first-time setup (hidden prompt)
+  connect --url <address> [--site <name>]                            connect this computer by approving it in the
+                                                                     browser (no key to copy; /octocheck-connect)
+  setup  --site <name> [--profile developer|bot] [--url <address>]   first-time setup with an API key (hidden prompt)
   rotate --site <name> [--profile developer|bot]                     replace a saved key (hidden prompt)
   check  --site <name> [--profile developer|bot]                     test the saved key
   list                                                               show configured sites (no secrets)
@@ -548,7 +734,9 @@ const USAGE = `OctoCheck site script
                                                                      get the scripts that need review
                                                                      (see octocheck-fetch.cjs)
   tasks  --site <name> [--approve]                                   group the fetched scripts into review tasks;
-                                                                     --approve records the user's yes to the plan
+                                                                     --approve records the user's yes to the plan;
+                                                                     --only server|client and --module <name>[,<name>]
+                                                                     limit the plan
                                                                      (see octocheck-tasks.cjs)
   next   --site <name>                                               show the next task of an approved plan
   record --site <name> --task <n> [--file <path>]                    check the findings Claude wrote, then save them
@@ -556,10 +744,10 @@ const USAGE = `OctoCheck site script
   report --site <name>                                               rebuild this run's report from the saved state
                                                                      (see octocheck-report.cjs)
 
-Run setup and rotate in a normal terminal, not inside Claude Code.`;
+Run setup and rotate in a normal terminal, not inside Claude Code. connect is safe anywhere.`;
 
 const FLAGS = {
-  site: true, profile: true, url: true, 'blast-radius': true, 'skip-hook-check': false, 'allow-insecure-http': false, approve: false, only: true, task: true, file: true, help: false,
+  site: true, profile: true, url: true, 'blast-radius': true, 'skip-hook-check': false, 'allow-insecure-http': false, approve: false, only: true, module: true, task: true, file: true, help: false, 'no-browser': false,
 };
 
 function parseArgs(argv) {
@@ -593,7 +781,8 @@ async function main(argv, ctxOverrides = {}) {
       io.out(USAGE);
       return command || flags.help ? 0 : 2;
     }
-    if (command === 'setup' || command === 'rotate') await runSetup(command, flags, ctx);
+    if (command === 'connect') await runConnect(flags, ctx);
+    else if (command === 'setup' || command === 'rotate') await runSetup(command, flags, ctx);
     else if (command === 'check') await runCheck(flags, ctx);
     else if (command === 'list') runList(ctx);
     else if (command === 'fetch') await require('./octocheck-fetch.cjs').runFetch(flags, ctx);
@@ -617,6 +806,7 @@ async function main(argv, ctxOverrides = {}) {
 module.exports = {
   main, parseArgs, mask, checkUrl, isLocalHost, getInfo, callEndpoint, httpGet, serverMessage, promptHidden, readStore, writeStore,
   readSites, loadCredentials, hookRegistered, checkStoragePlace, credentialsDir, UserError,
+  authHeader, suggestSiteName, waitForApproval, openBrowser, runConnect, CONNECTION_KEY,
   CRED_FILE, SITES_FILE, CREDENTIAL_GUARD_HOOK, PROFILES, SUPPORTED_BUNDLE_VERSION, checkSiteName, checkProfileName,
 };
 

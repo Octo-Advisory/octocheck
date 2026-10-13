@@ -36,6 +36,8 @@ console.log(`Installing OctoCheck into ${targetDir}\n`);
 
 copyFile('.claude/commands/octocheck-init.md', '.claude/commands/octocheck-init.md');
 copyFile('.claude/commands/octocheck-continue.md', '.claude/commands/octocheck-continue.md');
+copyFile('.claude/commands/octocheck-connect.md', '.claude/commands/octocheck-connect.md');
+copyFile('.claude/settings.hooks.json', '.claude/settings.hooks.json');
 copyFile('.claude/hooks/block-source-write.cjs', '.claude/hooks/block-source-write.cjs');
 copyFile('.claude/hooks/block-credentials-read.cjs', '.claude/hooks/block-credentials-read.cjs');
 copyFile('.claude/scripts/octocheck-site.cjs', '.claude/scripts/octocheck-site.cjs');
@@ -45,6 +47,7 @@ copyFile('.claude/scripts/octocheck-tasks.cjs', '.claude/scripts/octocheck-tasks
 copyFile('.claude/scripts/octocheck-review.cjs', '.claude/scripts/octocheck-review.cjs');
 copyFile('.claude/scripts/octocheck-report.cjs', '.claude/scripts/octocheck-report.cjs');
 copyFile('.claude/scripts/octocheck-rules.cjs', '.claude/scripts/octocheck-rules.cjs');
+copyFile('.claude/scripts/octocheck-hooks.cjs', '.claude/scripts/octocheck-hooks.cjs');
 copyFile('.claude/scripts/bundle_schema_v1.json', '.claude/scripts/bundle_schema_v1.json');
 copyFile('rules/rules.core.yaml', 'rules/rules.core.yaml');
 copyFile('rules/rules.ui-scripts.yaml', 'rules/rules.ui-scripts.yaml');
@@ -73,11 +76,15 @@ if (!existingGitignore.includes('octocheck/cache/')) {
   console.log('  .gitignore already has OctoCheck entries — left untouched');
 }
 
-console.log('\nHooks config (.claude/settings.hooks.json) was NOT auto-merged — settings.json');
-console.log('is often already customized per project. Merge it in by hand:');
-console.log(`  ${path.join(sourceDir, '.claude', 'settings.hooks.json')}`);
-console.log('into your project\'s .claude/settings.json under the "hooks" key. It registers two hooks: the write guard and the');
-console.log('credentials guard (needed only if you review Frappe sites; the site setup refuses to save a secret without it).\n');
+// Register the write guard and the credentials guard in .claude/settings.json, keeping the team's
+// other settings. Without the credentials guard, connecting a site is refused.
+const hooks = require(path.join(sourceDir, '.claude', 'scripts', 'octocheck-hooks.cjs'));
+const hookResult = hooks.ensureHooks(targetDir, sourceDir);
+console.log(`\n${hooks.describeResult(hookResult)}`);
+if (hookResult.status === 'created' || hookResult.status === 'updated') {
+  console.log('If Claude Code is already open in this project, exit it and start it again so the hooks load.');
+}
+console.log('');
 
 for (const name of ['settings.json', 'settings.local.json']) {
   let text = '';
@@ -90,3 +97,4 @@ for (const name of ['settings.json', 'settings.local.json']) {
 }
 
 console.log('Install complete. Next: open Claude Code in this repo and run /octocheck-init');
+console.log('To review a Frappe site\'s UI scripts: run /octocheck-connect in Claude Code and approve it in your browser.');

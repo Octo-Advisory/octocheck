@@ -16,7 +16,7 @@ const fs = require('fs');
 const path = require('path');
 const site = require('./octocheck-site.cjs');
 const { clean, stateDirFor } = require('./octocheck-fetch.cjs');
-const { readRequired } = require('./octocheck-tasks.cjs');
+const { readRequired, describeModuleScope } = require('./octocheck-tasks.cjs');
 const { loadRules } = require('./octocheck-rules.cjs');
 
 const { UserError } = site;
@@ -115,7 +115,11 @@ function buildReport({ cwd, stateDir, now }) {
   }
   const contractTaskScripts = progress.tasks.filter((t) => t.type === 'contract').flatMap((t) => t.scripts);
   const inTasks = new Set(progress.tasks.flatMap((t) => t.scripts.map((s) => s.slug)));
-  const notReReviewed = (plan.unchanged || []).filter((u) => !inTasks.has(u.slug)).sort((a, b) => a.name.localeCompare(b.name) || a.slug.localeCompare(b.slug));
+  // In a module run, only the scope's own unchanged scripts are carried forward; listing the whole
+  // site would bury the module's report.
+  const scopeModules = progress.scope && Array.isArray(progress.scope.modules) ? new Set(progress.scope.modules) : null;
+  const inScopeModules = (u) => !scopeModules || ((metaOf(u) || {}).modules || []).some((m) => scopeModules.has(m));
+  const notReReviewed = (plan.unchanged || []).filter((u) => !inTasks.has(u.slug) && inScopeModules(u)).sort((a, b) => a.name.localeCompare(b.name) || a.slug.localeCompare(b.slug));
 
   const stamp = (path.basename(progress.run_report_file || '').match(/^report-(.+)\.md$/) || [])[1] || 'unnamed';
   const rs = g.rulesSummary;
@@ -130,7 +134,11 @@ function buildReport({ cwd, stateDir, now }) {
   if (rs) {
     push(`Rules: UI-script rules v${esc(rs.version)} (${rs.review_rules} review rules, ${rs.contract_checks} contract checks, ${plural(rs.team_rules || 0, 'team rule')}; disabled for this project: ${rs.disabled && rs.disabled.length ? rs.disabled.join(', ') : 'none'})`);
   }
-  if (progress.scope && progress.scope.only) {
+  if (progress.scope && Array.isArray(progress.scope.modules)) {
+    const d = progress.scope;
+    const waiting = d.deferred ? ` (${d.deferred} of them need${d.deferred === 1 ? 's' : ''} review and stay${d.deferred === 1 ? 's' : ''} queued)` : '';
+    push(`Scope: ${esc(describeModuleScope(d))} Scripts outside the scope were not reviewed in this run${waiting}.`);
+  } else if (progress.scope && progress.scope.only) {
     const d = progress.scope;
     push(`Scope: ${d.only === 'server' ? 'Server Scripts' : 'Client Scripts'} only (--only ${d.only}). Deferred, never reviewed yet: ${plural(d.deferred, `${d.deferred_kind} script`)}. Review them later with /octocheck-init --site ${esc(progress.site)} --only ${d.deferred_kind}.`);
   }
@@ -195,7 +203,7 @@ function buildReport({ cwd, stateDir, now }) {
         if (!kinds.get(b.kind).includes(b.reason)) kinds.get(b.kind).push(b.reason);
       }
       const why = [...triggers.values()].map((t) => `**${cell(t.script)}** changed (${[...t.kinds].map(([kind, reasons]) => `${cell(kind)}: ${reasons.map((r) => cell(r)).join(', ')}`).join('; ')})`);
-      push(`### ${link(s.name, s.desk_url)}`, describe(s, metaOf(s)));
+      push(`### ${link(s.name, s.desk_url)}`, `${describe(s, metaOf(s))}${s.outside_scope ? ' · outside this module scope' : ''}`);
       push(`Re-checked because ${why.length ? why.join('; ') : 'a linked script changed'}.`, '', '| Line | Rule | Severity | Note | Because |', '| --- | --- | --- | --- | --- |');
       const triggerName = new Map((s.because || []).map((b) => [b.slug, b.script]));
       for (const x of [...s.flags].sort(byLine)) push(`| ${lineOf(x.l)} | ${esc(x.r)} | ${cap(x.s)} | ${cell(x.n)} | ${cell(triggerName.get(x.b) || '—')} |`);

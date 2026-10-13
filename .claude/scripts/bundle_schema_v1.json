@@ -1,5 +1,5 @@
 {
-  "$comment": "Shape of what the connector returns (the 'message' part of the Frappe response). Checked by the connector's tests and, later, by the OctoCheck runner. review_bundle is what get_review_bundle returns (increment 3).",
+  "$comment": "Shape of what the connector returns (the 'message' part of the Frappe response). Checked by the connector's tests and, later, by the OctoCheck runner. review_bundle is what get_review_bundle returns (increment 3). v0.1.1 added optional fields, only returned by get_manifest(with_modules=1): script_entry.modules, script_entry.module_source and manifest.module_defs. The bundle version is unchanged, so older runners keep working.",
   "title": "OctoCheck connector bundle schema",
   "bundle_version": 1,
   "$defs": {
@@ -55,6 +55,8 @@
         "apply_to": {"type": ["string", "null"]},
         "enabled": {"type": "boolean"},
         "module": {"type": ["string", "null"]},
+        "modules": {"type": "array", "items": {"type": "string"}},
+        "module_source": {"enum": ["doctype", "caller", "own_field", "none"]},
         "modified": {"type": "string"},
         "hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
       }
@@ -69,7 +71,8 @@
         "user": {"type": "string"},
         "access_mode": {"enum": ["developer", "reviewer"]},
         "count": {"type": "integer"},
-        "scripts": {"type": "array", "items": {"$ref": "#/$defs/script_entry"}}
+        "scripts": {"type": "array", "items": {"$ref": "#/$defs/script_entry"}},
+        "module_defs": {"type": "array", "items": {"type": "string"}}
       }
     },
     "link": {

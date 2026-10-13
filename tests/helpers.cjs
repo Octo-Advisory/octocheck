@@ -8,10 +8,12 @@ const { EventEmitter } = require('events');
 
 const HOOK = 'block-credentials-read.cjs';
 
-/** A fake octocheck_connector. accounts: { "KEY:SECRET": { user, mode } }.
+/** A fake octocheck_connector. accounts: { "KEY:SECRET": { user, mode } }, and { "connection:<token>": ... }
+ *  for browser connections.
  *  With options.site (a model from site-model.cjs) it also serves get_manifest and
  *  get_review_bundle. Other options: pageSize, rate { endpoint, times, retryAfter },
- *  fail { endpoint, status, times }, tamper { manifest(m), bundle(b) }. */
+ *  fail { endpoint, status, times }, tamper { manifest(m), bundle(b) }, connectorVersion (default 0.1.0;
+ *  0.1.1 and later answer get_manifest with_modules=1 with each script's modules). */
 function startConnector(options = {}) {
   const accounts = options.accounts || { 'goodkey1234:goodsecret99': { user: 'dev@example.com', mode: 'developer' } };
   const calls = [];
@@ -20,7 +22,7 @@ function startConnector(options = {}) {
   const server = http.createServer((req, res) => {
     const u = new URL(req.url, 'http://localhost');
     const endpoint = u.pathname.startsWith(prefix) ? u.pathname.slice(prefix.length) : null;
-    calls.push({ url: req.url, endpoint, auth: req.headers.authorization || null, query: u.searchParams.get('scripts') });
+    calls.push({ url: req.url, endpoint, auth: req.headers.authorization || null, query: u.searchParams.get('scripts'), withModules: u.searchParams.get('with_modules') });
     const send = (status, body, headers = {}) => {
       res.writeHead(status, { 'Content-Type': 'application/json', ...headers });
       res.end(typeof body === 'string' ? body : JSON.stringify(body));
@@ -28,7 +30,9 @@ function startConnector(options = {}) {
     if (options.redirectTo) return send(302, {}, { Location: options.redirectTo });
     if (!endpoint || !['get_info', 'get_manifest', 'get_review_bundle'].includes(endpoint)) return send(404, { exc_type: 'NotFound' });
     if (options.status) return send(options.status, options.body || {});
-    const token = (req.headers.authorization || '').replace(/^token /, '');
+    // "token KEY:SECRET" for API keys; "OctoCheck <token>" for a browser connection, looked up as "connection:<token>".
+    const header = req.headers.authorization || '';
+    const token = header.startsWith('OctoCheck ') ? `connection:${header.slice(10)}` : header.replace(/^token /, '');
     const account = accounts[token];
     if (!account) return send(401, { exc_type: 'AuthenticationError' });
     if (options.disabled) {
@@ -49,7 +53,7 @@ function startConnector(options = {}) {
     if (endpoint === 'get_info') {
       return send(200, {
         message: {
-          bundle_version: options.bundleVersion || 1, connector_version: '0.1.0', site: 'test.localhost',
+          bundle_version: options.bundleVersion || 1, connector_version: options.connectorVersion || '0.1.0', site: 'test.localhost',
           frappe_version: '15.0.0', user: account.user, access_mode: account.mode, page_size: options.pageSize || 25,
           counts: { 'Server Script': 7, 'Client Script': 1 },
         },
@@ -57,7 +61,7 @@ function startConnector(options = {}) {
     }
     if (!options.site) return send(404, { exc_type: 'NotFound' });
     if (endpoint === 'get_manifest') {
-      const m = options.site.manifest();
+      const m = options.site.manifest({ withModules: u.searchParams.get('with_modules') === '1' });
       m.user = account.user;
       m.access_mode = account.mode;
       return send(200, { message: tamper.manifest ? tamper.manifest(m) || m : m });

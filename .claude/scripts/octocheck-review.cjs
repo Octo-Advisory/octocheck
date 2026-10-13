@@ -257,6 +257,8 @@ function runRecord(flags, ctx) {
       const kept = old ? old.flags.filter(isContractFlag) : [];
       if (kept.length) notes.push(`${clean(s.name)}: kept ${plural(kept.length, 'earlier contract flag')}; a contract check on the same trigger replaces them.`);
       entry = { doctype: s.doctype, name: s.name, h: s.hash, en: s.enabled, rev: today, rv: progress.rules.id, flags: item.flags.map(stripExtras).concat(kept), del: false };
+      // The modules at review time, so a module run can still report this script after it is removed.
+      if (Array.isArray(s.modules)) entry.m = s.modules;
     } else {
       if (!old) throw new UserError(`${clean(s.name)} has no saved review entry, so a contract check has nothing to update. Run fetch again.`);
       const rechecked = new Set((s.because || []).map((b) => b.slug));
@@ -269,7 +271,10 @@ function runRecord(flags, ctx) {
     task: task.id, type: task.type, name: task.name, recorded_at: (ctx.now ? ctx.now() : new Date()).toISOString(),
     scripts: scripts.map((item) => {
       const s = bySlug.get(item.slug);
-      return { slug: s.slug, doctype: s.doctype, name: s.name, desk_url: s.desk_url, enabled: s.enabled, ...(task.type === 'contract' ? { because: s.because } : {}), flags: item.flags };
+      return {
+        slug: s.slug, doctype: s.doctype, name: s.name, desk_url: s.desk_url, enabled: s.enabled,
+        ...(task.type === 'contract' ? { because: s.because } : {}), ...(s.outside_scope ? { outside_scope: true } : {}), flags: item.flags,
+      };
     }),
   };
   writes.push({ file: path.join(stateDir, 'recorded', `task-${task.id}.json`), text: `${JSON.stringify(recorded, null, 2)}\n` });

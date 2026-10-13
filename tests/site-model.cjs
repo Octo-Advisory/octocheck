@@ -17,6 +17,7 @@ class SiteModel {
     this.hidden = new Set(); // in the manifest but missing from bundles (removed or unreadable meanwhile)
     this.bundleHash = new Map(); // name -> a newer hash the bundle reports (edited during the fetch)
     this.version = 0;
+    this.moduleDefs = ['Core', 'DPR', 'Stock', 'Accounts']; // what get_manifest(with_modules=1) lists
   }
 
   add(name, opts = {}) {
@@ -25,6 +26,7 @@ class SiteModel {
       name, doctype, type: opts.type || (doctype === 'Client Script' ? null : 'DocType Event'),
       dt: opts.dt === undefined ? 'ToDo' : opts.dt, event: opts.event || 'Before Save', api: opts.api || null,
       enabled: opts.enabled !== false, text: opts.text || 'pass\n',
+      modules: opts.modules || [], moduleSource: opts.moduleSource || (opts.modules && opts.modules.length ? 'doctype' : 'none'),
     };
     script.hash = sha(`${name}\u0000${script.text}\u0000${script.enabled}`);
     this.scripts.set(keyOf(doctype, name), script);
@@ -80,9 +82,20 @@ class SiteModel {
     };
   }
 
-  manifest() {
-    const entries = [...this.scripts.values()].sort((a, b) => keyOf(a.doctype, a.name).localeCompare(keyOf(b.doctype, b.name))).map((s) => this.entry(s));
-    return { bundle_version: 1, generated_at: '2026-10-09 08:00:00', user: 'x', access_mode: 'developer', count: entries.length, scripts: entries };
+  /** Modules are scope only: changing them never changes a hash, as on the real connector. */
+  setModules(name, modules, source = 'doctype') {
+    const s = this.find(name);
+    s.modules = modules;
+    s.moduleSource = source;
+    return this;
+  }
+
+  manifest({ withModules = false } = {}) {
+    const sorted = [...this.scripts.values()].sort((a, b) => keyOf(a.doctype, a.name).localeCompare(keyOf(b.doctype, b.name)));
+    const entries = sorted.map((s) => (withModules ? { ...this.entry(s), modules: [...s.modules], module_source: s.moduleSource } : this.entry(s)));
+    const m = { bundle_version: 1, generated_at: '2026-10-09 08:00:00', user: 'x', access_mode: 'developer', count: entries.length, scripts: entries };
+    if (withModules) m.module_defs = [...this.moduleDefs];
+    return m;
   }
 
   linksOf(s) {
@@ -139,7 +152,7 @@ class FixtureSite {
     for (const s of this.b.scripts) if (s.name === name) s.hash = hash;
   }
 
-  manifest() { return clone(this.m); }
+  manifest() { return clone(this.m); } // like connector 0.1.0: no modules
 
   bundle(requested) {
     const want = new Set(requested.map((r) => keyOf(r.doctype, r.name)));

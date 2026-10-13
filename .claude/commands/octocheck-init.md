@@ -144,6 +144,11 @@ Run `node .claude/scripts/octocheck-site.cjs tasks --site <name>` and show its o
 the user passed `--only server` or `--only client` to `/octocheck-init`, add exactly that option
 (`--only` limits the plan to Server Scripts or to Client Scripts; the other kind is left for a later
 run). Never add `--only` on your own.
+If the user passed `--module <name>` (one name, or several separated by commas), add exactly that
+option too, unchanged: module names are case-sensitive, so never correct, guess or add one. `--module`
+limits the plan to the scripts of those Frappe modules; the rest stays queued for a later run. If
+`tasks` stops with a message about the module (an unknown name, a module with no scripts, or a
+connector that is too old), show the message as it is and stop.
 If it reports 0 tasks, say nothing needs review (every script is unchanged and nothing is linked
 to a change), do not ask for approval, and stop.
 
@@ -155,12 +160,14 @@ tasks, R scripts to review, L linked scripts to re-check), ask exactly:
 
 Before asking, point out anything the output flagged: rules disabled for this project, team
 rules added or ignored, removed scripts, any note, and, if there is a "Scope:" line, how many
-scripts were deferred and that `/octocheck-init --site <name> --only <kind>` reviews them later. Do not open a bundle or read any script's
-text.
+scripts were deferred and that `/octocheck-init --site <name> --only <kind>` reviews them later
+(for a module scope: which modules, how many scripts are in it, and that scripts outside it stay
+queued). Do not open a bundle or read any script's text.
 
 Wait for an explicit yes; never infer one. If the answer is no, ask what to change. Tasks per
 group is `group_size_cap` in `octocheck.config.yaml`, the linked-script limit is `--blast-radius`,
-and a plan can be limited to one kind of script with `--only server` or `--only client`. After the user changes one, run S1 or S2 again and ask again.
+and a plan can be limited to one kind of script with `--only server` or `--only client`, or to
+Frappe modules with `--module <name>`. After the user changes one, run S1 or S2 again and ask again.
 
 On yes, run `node .claude/scripts/octocheck-site.cjs tasks --site <name> --approve`. If it says the
 plan is out of date, run S2 again and ask again. Otherwise tell the user to run

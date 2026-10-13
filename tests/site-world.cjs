@@ -16,9 +16,9 @@ const ACCOUNTS = { 'goodkey1234:goodsecret99': { user: 'dev@example.com', mode: 
 const ROOT = path.join(__dirname, '..');
 const RULES_ID = loadRules(ROOT).summary.id;
 
-async function setup(model) {
+async function setup(model, connectorOptions = {}) {
   const w = makeWorld();
-  const c = await startConnector({ site: model, accounts: ACCOUNTS });
+  const c = await startConnector({ site: model, accounts: ACCOUNTS, ...connectorOptions });
   fs.writeFileSync(path.join(w.cwd, 'octocheck.sites.json'), JSON.stringify({ [SITE]: { url: c.url } }));
   fs.mkdirSync(w.credDir, { recursive: true, mode: 0o700 });
   fs.writeFileSync(w.credFile, JSON.stringify({

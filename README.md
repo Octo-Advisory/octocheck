@@ -32,8 +32,14 @@ npx github:Octo-Advisory/octocheck /path/to/your-repo
 **Option B — clone + script (macOS/Linux/WSL/Git Bash):**
 ```bash
 git clone https://github.com/Octo-Advisory/octocheck.git
-bash octocheck-plugin/install.sh /path/to/your-repo
+bash octocheck/install.sh /path/to/your-repo
 ```
+
+Both need **Node.js 16 or newer** (the hooks and scripts run on Node). On Windows without WSL, use
+Option A from PowerShell. Typing plain `bash` in PowerShell starts WSL, not Git Bash, so for Option B
+on Windows run Git Bash's own `bash.exe` (for example `& "C:\Program Files\Git\bin\bash.exe" octocheck/install.sh .`).
+Run the installer for the repo you want reviewed (its root folder, or pass that folder's path),
+not inside the OctoCheck clone.
 
 Either way, this:
 - copies `.claude/commands/octocheck-init.md`, `.claude/commands/octocheck-continue.md`, and
@@ -45,49 +51,38 @@ Either way, this:
 - appends recommended entries to your `.gitignore` (safe to skip if you'd rather commit
   everything — see `octocheck.gitignore.snippet`)
 
-**Then enable the hooks** — not auto-merged, since your project's `.claude/settings.json` may
-already be customized: open `.claude/settings.hooks.json` from this repo and merge its
-`"hooks"` key into your project's `.claude/settings.json`. It registers two hooks: the write
-guard, and the credentials guard (which only matters if you review Frappe sites). Without
-this step, read-only enforcement still works via `allowed-tools`, just without the independent
-process-level backstop. If you merged an older copy of this file, merge it again: the old hook
-commands used a path relative to the current folder, which breaks when Claude changes folder,
-and a hook that cannot run blocks nothing. The current commands find the hook files through
-`$CLAUDE_PROJECT_DIR` and end with `|| exit 2`, so a hook that cannot run blocks the tool call.
-
-## Use
-
-1. Open Claude Code in your repo.
-2. Run `/octocheck-init` — or `/octocheck-init main` to scope the whole review to just what's
-   changed against a branch instead of the full codebase (much cheaper, since every check is
-   LLM-based, not static).
-   - It creates the `octocheck/` working folder.
-   - It checks for `CLAUDE.md` — offers to create or refresh it, always asking permission
-     first, and proceeds without one if you decline rather than stalling.
-   - It writes `octocheck/plan.md`, a task-by-task breakdown of the review, and stops.
-3. Read `octocheck/plan.md` and approve it (or ask for changes, then approve).
-4. Run `/octocheck-continue`.
-   - It runs exactly one task: reviews the files in scope against `rules.core.yaml` +
-     `rules.local.yaml`, appends flags to `octocheck/reports/report-<date>.md`, and stops to
-     ask before continuing.
-   - Run `/octocheck-continue --auto` instead if you explicitly want it to keep going through
-     every remaining task without stopping each time — it still stops immediately on any
-     high-severity finding or blocked tool call. This is opt-in per run, never the default.
-5. Keep running `/octocheck-continue` (or let `--auto` run) until it reports the review is
-   complete.
-6. Open `octocheck/reports/report-<date>.md` — flags grouped by factor, then file, then line,
-   headed by the ruleset version that produced them.
+**The hooks are registered for you.** The installer adds two hooks to your project's
+`.claude/settings.json`: the write guard (blocks any edit outside `octocheck/`) and the credentials
+guard (keeps Claude away from saved site connections). If the file already exists, everything else
+in it is kept; an OctoCheck hook still using the old relative command is updated. If the file is not
+valid JSON it is left alone and the installer says what to add. If Claude Code was already open in
+the project, exit it and start it again so the hooks load.
 
 ## Reviewing a Frappe site's UI scripts (preview)
 
 OctoCheck can also review Server Scripts and Client Scripts that live in a Frappe site's
 database, through the read-only `octocheck_connector` app installed on that site
-(`github.com/Octo-Advisory/octocheck_frappe`, v0.1.0 or later). This part is being built in
-steps; **setup, `fetch`, the approved review plan, the review loop and the report all work today**.
+(`github.com/Octo-Advisory/octocheck_frappe`; v0.1.1 or later for `/octocheck-connect` and
+`--module`). **Connecting, `fetch`, the approved review plan, the review loop and the report all
+work today**.
 The overnight (unattended) run is still to come. The rules for UI scripts are in
 `rules/rules.ui-scripts.yaml` and are still a draft for your team to review.
 
-**Reviewing a site, in order** (after the one-time setup below). In Claude Code:
+**Connect once per site, in the browser.** In Claude Code:
+
+```
+/octocheck-connect https://erp.example.com
+```
+
+Your browser opens the site; log in if asked and click **Approve**. That's all: no API key to
+generate, no secret to paste, no separate terminal. The site gives this computer its own
+connection, which only opens the connector's read endpoints, lasts 90 days, and shows up on the site
+under **OctoCheck Connection**, where deleting it disconnects the computer. OctoCheck checks the
+connection, saves it outside the repo (Claude never sees it) and names the site from its address,
+for example `erp-example`; add `--site <name>` to choose the name. If the browser does not open,
+the command prints the link to open yourself.
+
+**Reviewing a site, in order.** In Claude Code:
 
 1. `/octocheck-init --site my-site` fetches what needs review, groups it into tasks (scripts on the
    same DocType and event, or the same DocType and view, are reviewed together; API scripts together,
@@ -95,6 +90,13 @@ The overnight (unattended) run is still to come. The rules for UI scripts are in
    Nothing is reviewed before you say yes. On a big site, start smaller:
    `/octocheck-init --site my-site --only server` plans only the Server Scripts (usually the higher
    risk ones). The Client Scripts stay unreviewed until you run it again with `--only client`.
+   Or review one Frappe module at a time: `/octocheck-init --site my-site --module DPR` (several:
+   `--module DPR,Stock`; names are case-sensitive). A script belongs to the module of the DocType it
+   runs on; an API script to the modules of the scripts that call it; a Scheduler script to its own
+   module field. Scripts outside the module are not marked reviewed, so they stay queued for a later
+   run. A linked script in another module still gets its contract check when a script in the module
+   changed, marked "outside this module scope" in the report. The module is not part of any hash, so
+   a DocType moving module never triggers a review. Combines with `--only`.
 2. `/octocheck-continue --site my-site` runs one task, then stops and asks. Claude reads the scripts
    and writes its findings to a small results file. A script checks that file (real rule IDs, real
    line numbers, every script covered) and only then saves anything. Severity and factor always come
@@ -109,8 +111,9 @@ A script is queued again when it changed, when its last review is older than `re
 or when the rules changed since that review. You never need to clean up results files: each one is
 deleted once it is recorded, and a new plan always starts clean.
 
-**One-time setup per site.** Run this in a normal terminal, **not inside Claude Code**. The key
-and secret are typed at a hidden prompt, so they never appear in a conversation:
+**Or set up with an API key** (connectors older than 0.1.1, or the unattended bot). Run this in a
+normal terminal, **not inside Claude Code**. The key and secret are typed at a hidden prompt, so
+they never appear in a conversation:
 
 ```bash
 node .claude/scripts/octocheck-site.cjs setup --site my-site

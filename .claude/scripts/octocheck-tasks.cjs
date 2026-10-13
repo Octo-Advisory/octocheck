@@ -24,6 +24,13 @@
 // run (nothing is lost: those scripts stay "never reviewed" until a plan includes them). Linked
 // scripts that need a contract check are still included, whatever their kind.
 //
+// --module <name>[,<name>...] limits the plan to the scripts of those Frappe modules (decided with the
+// connector, 0.1.1 or later: a script's module is the module of the DocType it runs on; an API script
+// takes the modules of the scripts that call it; otherwise the script's own module field). Like --only,
+// nothing outside the scope is marked reviewed, so it stays queued for a later run. Contract checks are
+// kept only for neighbours of scripts reviewed in this run; a neighbour in another module still gets its
+// check, marked outside_scope. A module is scope only: it is not part of any hash.
+//
 // Writes <state dir>/progress.json: the task list, the report file name, and `approved: false`.
 // Only this command and the review commands write that file; fetch never does.
 
@@ -74,8 +81,65 @@ function scriptRow(item, meta, extra) {
   const m = meta || {};
   return {
     slug: item.slug, doctype: item.doctype, name: item.name, script_type: m.script_type || null, enabled: item.enabled !== false,
-    desk_url: item.desk_url, bundle: item.bundle, context: item.context || null, ...extra,
+    desk_url: item.desk_url, bundle: item.bundle, context: item.context || null,
+    ...(Array.isArray(m.modules) ? { modules: m.modules } : {}), ...extra,
   };
+}
+
+/** --module value -> a clean list of names, or null when not given. Names are case-sensitive, as in Frappe. */
+function parseModules(value) {
+  if (value === undefined || value === null) return null;
+  const names = [...new Set(String(value).split(',').map((x) => x.trim()).filter(Boolean))];
+  if (!names.length) throw new UserError('--module needs a module name, for example --module DPR (several: --module DPR,Stock).');
+  return names;
+}
+
+function editDistance(a, b) {
+  const row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i += 1) {
+    let prev = row[0];
+    row[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const cur = row[j];
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = cur;
+    }
+  }
+  return row[b.length];
+}
+
+/** Module names on the site that look like `name`: same letters in another case, or a small typo. */
+function suggestModules(name, defs) {
+  const low = name.toLowerCase();
+  return defs
+    .map((d) => ({ d, score: d.toLowerCase() === low ? 0 : d.toLowerCase().includes(low) || low.includes(d.toLowerCase()) ? 1 : editDistance(low, d.toLowerCase()) + 1 }))
+    .filter((x) => x.score <= 3)
+    .sort((a, b) => a.score - b.score || a.d.localeCompare(b.d))
+    .slice(0, 5)
+    .map((x) => x.d);
+}
+
+/** Stop with a clear message when --module cannot be used as asked. Returns the modules and the scripts in them. */
+function checkModules(modules, plan, manifest, siteName) {
+  const available = plan.modules && plan.modules.available === true;
+  if (!available) {
+    const version = plan.connector && plan.connector.version ? plan.connector.version : 'unknown';
+    throw new UserError(`--module needs octocheck_connector 0.1.1 or later on ${siteName} (it has ${version}). Update the connector on the site, then run /octocheck-init again. Without --module, the review works as before.`);
+  }
+  const defs = plan.modules.defs || [];
+  const scripts = Object.values((manifest && manifest.scripts) || {});
+  const withScripts = [...new Set(scripts.flatMap((s) => s.modules || []))].sort();
+  for (const name of modules) {
+    if (defs.includes(name)) continue;
+    const near = suggestModules(name, defs);
+    throw new UserError(`There is no module named "${clean(name)}" on ${siteName}. ${near.length ? `Did you mean: ${near.map((n) => clean(n)).join(', ')}? ` : ''}Module names are case-sensitive.${withScripts.length ? ` Modules that have scripts: ${withScripts.slice(0, 20).map((n) => clean(n)).join(', ')}${withScripts.length > 20 ? ', ...' : ''}.` : ''}`);
+  }
+  const wanted = new Set(modules);
+  const inModules = scripts.filter((s) => (s.modules || []).some((m) => wanted.has(m)));
+  if (!inModules.length) {
+    throw new UserError(`Module${modules.length === 1 ? '' : 's'} ${modules.map((n) => clean(n)).join(', ')} ${modules.length === 1 ? 'has' : 'have'} no Server or Client Scripts that your account can read on ${siteName}, so there is nothing to review.${withScripts.length ? ` Modules that have scripts: ${withScripts.slice(0, 20).map((n) => clean(n)).join(', ')}${withScripts.length > 20 ? ', ...' : ''}.` : ''}`);
+  }
+  return inModules;
 }
 
 /** Split into groups, then into parts of at most `cap` scripts. Returns task shells in a stable order. */
@@ -113,7 +177,7 @@ function readRuleSet(cwd) {
 }
 
 /** Build progress.json from plan.json and manifest.json. Pure: no files are touched. */
-function buildProgress({ plan, manifest, cap, now, rules, only = null }) {
+function buildProgress({ plan, manifest, cap, now, rules, only = null, modules = null }) {
   const warnings = [];
   const seen = new Map();
   const metaOf = (item) => {
@@ -124,13 +188,36 @@ function buildProgress({ plan, manifest, cap, now, rules, only = null }) {
     return meta;
   };
   const allReview = plan.review || [];
-  const inScope = (item) => !only || kindOfDoctype(item.doctype) === only;
+  const wanted = modules ? new Set(modules) : null;
+  const modulesOf = (item) => {
+    const meta = manifest && manifest.scripts && manifest.scripts[`${item.doctype}/${item.name}`];
+    return (meta && meta.modules) || [];
+  };
+  const inModules = (item) => !wanted || modulesOf(item).some((m) => wanted.has(m));
+  const inKind = (item) => !only || kindOfDoctype(item.doctype) === only;
+  const inScope = (item) => inKind(item) && inModules(item);
   const deferred = allReview.filter((item) => !inScope(item));
-  const review = chunkInto(allReview.filter(inScope), metaOf, cap, 'review', (item) => scriptRow(item, metaOf(item), {
+  const reviewItems = allReview.filter(inScope);
+  const review = chunkInto(reviewItems, metaOf, cap, 'review', (item) => scriptRow(item, metaOf(item), {
     status: item.status, reason: item.reason, hash: item.hash, enabled_flipped: item.enabled_flipped || undefined,
   }));
-  const contract = chunkInto(plan.impacted || [], metaOf, cap, 'contract', (item) => scriptRow(item, metaOf(item), {
+  // With --module, a neighbour is re-checked only for changes reviewed in this run. Its other triggers
+  // come back when their own module is reviewed, so no check is done twice or before its trigger.
+  let impacted = plan.impacted || [];
+  let deferredContract = 0;
+  if (wanted) {
+    const reviewed = new Set(reviewItems.map((i) => i.slug));
+    const kept = [];
+    for (const item of impacted) {
+      const because = (item.because || []).filter((b) => reviewed.has(b.slug));
+      if (because.length) kept.push({ ...item, because });
+      else deferredContract += 1;
+    }
+    impacted = kept;
+  }
+  const contract = chunkInto(impacted, metaOf, cap, 'contract', (item) => scriptRow(item, metaOf(item), {
     because: (item.because || []).map((b) => ({ script: b.script, slug: b.slug, kind: b.kind, reason: b.reason, source: b.source })),
+    ...(wanted && !inModules(item) ? { outside_scope: true } : {}),
   }));
   const tasks = review.concat(contract).map((t, i) => ({ id: i + 1, ...t }));
   const count = (type) => tasks.filter((t) => t.type === type).reduce((n, t) => n + t.scripts.length, 0);
@@ -138,13 +225,33 @@ function buildProgress({ plan, manifest, cap, now, rules, only = null }) {
     mode: 'site', site: plan.site, plan_fetched_at: plan.fetched_at, approved: false,
     run_report_file: `octocheck/reports/report-${stamp(now)}.md`,
     group_size_cap: cap,
-    scope: { only: only || null, deferred: deferred.length, deferred_kind: only ? (only === 'server' ? 'client' : 'server') : null },
+    scope: {
+      only: only || null, deferred: deferred.length, deferred_kind: only ? (only === 'server' ? 'client' : 'server') : null,
+      ...(wanted ? moduleScope(modules, manifest, only, deferredContract) : {}),
+    },
     rules: rules || null,
     counts: { tasks: tasks.length, review_tasks: review.length, contract_tasks: contract.length, review_scripts: count('review'), contract_scripts: count('contract') },
     tasks,
-    removed: plan.removed || [], unavailable: plan.unavailable || [],
+    // A removed script stays in a module run's report only if it was last reviewed in that module
+    // (or before modules were recorded, when nobody can tell).
+    removed: (plan.removed || []).filter((r) => !wanted || !Array.isArray(r.m) || r.m.some((m) => wanted.has(m))),
+    unavailable: plan.unavailable || [],
     impacted_over_limit: plan.impacted_over_limit || [], impacted_disabled: plan.impacted_disabled || [],
     notes: (plan.warnings || []).concat(plan.notes || [], warnings),
+  };
+}
+
+/** The module part of progress.scope: which modules, how many scripts they have and why. */
+function moduleScope(modules, manifest, only, deferredContract) {
+  const wanted = new Set(modules);
+  const all = Object.values((manifest && manifest.scripts) || {});
+  const inScope = all.filter((s) => (s.modules || []).some((m) => wanted.has(m)) && (!only || kindOfDoctype(s.doctype) === only));
+  const bySource = { doctype: 0, caller: 0, own_field: 0 };
+  for (const s of inScope) if (s.module_source in bySource) bySource[s.module_source] += 1;
+  return {
+    modules, module_scripts: inScope.length, site_scripts: all.length, by_source: bySource,
+    deferred_contract: deferredContract,
+    no_module: all.filter((s) => Array.isArray(s.modules) && s.modules.length === 0).length,
   };
 }
 
@@ -190,6 +297,7 @@ async function runTasks(flags, ctx) {
     throw new UserError(`--only must be server or client (found "${String(flags.only)}"). Server means Server Scripts, client means Client Scripts.`);
   }
   const only = flags.only || null;
+  const modules = parseModules(flags.module);
   const stateDir = stateDirFor(cwd, flags.site);
   const plan = readRequired(path.join(stateDir, 'plan.json'), 'plan.json');
   const manifest = readRequired(path.join(stateDir, 'manifest.json'), 'manifest.json');
@@ -198,7 +306,8 @@ async function runTasks(flags, ctx) {
   if (plan.rules_id !== rules.id) {
     throw new UserError(`The rules changed since the last fetch (${plan.rules_id || 'none recorded'} to ${rules.id}), so which scripts need review may be out of date. Run fetch again, then tasks.`);
   }
-  const progress = buildProgress({ plan, manifest, cap: readGroupCap(cwd), now: ctx.now ? ctx.now() : new Date(), rules, only });
+  if (modules) checkModules(modules, plan, manifest, flags.site);
+  const progress = buildProgress({ plan, manifest, cap: readGroupCap(cwd), now: ctx.now ? ctx.now() : new Date(), rules, only, modules });
   // Results and recorded copies belong to the plan that produced them. A new plan has new tasks that
   // reuse the same numbers, so anything left from an earlier plan must never be mistaken for theirs.
   for (const dir of ['results', 'recorded']) fs.rmSync(path.join(stateDir, dir), { recursive: true, force: true });
@@ -207,7 +316,11 @@ async function runTasks(flags, ctx) {
   const c = progress.counts;
   io.out(`${flags.site}: ${c.tasks} task${c.tasks === 1 ? '' : 's'} (${c.review_tasks} review covering ${c.review_scripts} script${c.review_scripts === 1 ? '' : 's'}, ${c.contract_tasks} contract covering ${c.contract_scripts}).`);
   io.out(`Group size cap: ${progress.group_size_cap > 0 ? `${progress.group_size_cap} scripts per task` : 'off'}.`);
-  if (only) {
+  if (modules) {
+    io.out(`Scope: ${describeModuleScope(progress.scope)}`);
+    const d = progress.scope;
+    if (d.deferred) io.out(`Outside this scope: ${plural(d.deferred, 'script')} that need${d.deferred === 1 ? 's' : ''} review ${d.deferred === 1 ? 'is' : 'are'} not reviewed in this run and stay${d.deferred === 1 ? 's' : ''} queued. A run without --module (or with their module) reviews them.`);
+  } else if (only) {
     const d = progress.scope;
     io.out(`Scope: ${only === 'server' ? 'Server Scripts' : 'Client Scripts'} only (--only ${only}). Deferred: ${plural(d.deferred, `${d.deferred_kind} script`)}, never reviewed yet. Review them later with /octocheck-init --site ${flags.site} --only ${d.deferred_kind}.`);
   }
@@ -231,4 +344,15 @@ async function runTasks(flags, ctx) {
   return progress;
 }
 
-module.exports = { runTasks, approveTasks, buildProgress, groupOf, readGroupCap, readRuleSet, loadRules, readRequired, stamp, DEFAULT_GROUP_CAP };
+/** One line describing a module scope, used by tasks and by the report. */
+function describeModuleScope(scope) {
+  const parts = [];
+  const b = scope.by_source || {};
+  if (b.doctype) parts.push(`${b.doctype} by DocType`);
+  if (b.caller) parts.push(`${plural(b.caller, 'API script')} called from ${scope.modules.length === 1 ? 'it' : 'them'}`);
+  if (b.own_field) parts.push(`${b.own_field} by ${b.own_field === 1 ? 'its' : 'their'} own module field`);
+  const kind = scope.only ? `, ${scope.only === 'server' ? 'Server Scripts' : 'Client Scripts'} only` : '';
+  return `module${scope.modules.length === 1 ? '' : 's'} ${scope.modules.map((m) => clean(m)).join(', ')}${kind}: ${scope.module_scripts} of ${plural(scope.site_scripts, 'script')} on the site${parts.length ? ` (${parts.join(', ')})` : ''}.`;
+}
+
+module.exports = { runTasks, approveTasks, buildProgress, parseModules, suggestModules, checkModules, describeModuleScope, groupOf, readGroupCap, readRuleSet, loadRules, readRequired, stamp, DEFAULT_GROUP_CAP };

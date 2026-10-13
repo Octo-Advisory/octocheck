@@ -25,6 +25,8 @@ echo
 mkdir -p "$TARGET_DIR/.claude/commands" "$TARGET_DIR/.claude/hooks" "$TARGET_DIR/.claude/scripts"
 cp -v "$SOURCE_DIR/.claude/commands/octocheck-init.md" "$TARGET_DIR/.claude/commands/"
 cp -v "$SOURCE_DIR/.claude/commands/octocheck-continue.md" "$TARGET_DIR/.claude/commands/"
+cp -v "$SOURCE_DIR/.claude/commands/octocheck-connect.md" "$TARGET_DIR/.claude/commands/"
+cp -v "$SOURCE_DIR/.claude/settings.hooks.json" "$TARGET_DIR/.claude/"
 cp -v "$SOURCE_DIR/.claude/hooks/block-source-write.cjs" "$TARGET_DIR/.claude/hooks/"
 cp -v "$SOURCE_DIR/.claude/hooks/block-credentials-read.cjs" "$TARGET_DIR/.claude/hooks/"
 cp -v "$SOURCE_DIR/.claude/scripts/octocheck-site.cjs" "$TARGET_DIR/.claude/scripts/"
@@ -34,6 +36,7 @@ cp -v "$SOURCE_DIR/.claude/scripts/octocheck-tasks.cjs" "$TARGET_DIR/.claude/scr
 cp -v "$SOURCE_DIR/.claude/scripts/octocheck-review.cjs" "$TARGET_DIR/.claude/scripts/"
 cp -v "$SOURCE_DIR/.claude/scripts/octocheck-report.cjs" "$TARGET_DIR/.claude/scripts/"
 cp -v "$SOURCE_DIR/.claude/scripts/octocheck-rules.cjs" "$TARGET_DIR/.claude/scripts/"
+cp -v "$SOURCE_DIR/.claude/scripts/octocheck-hooks.cjs" "$TARGET_DIR/.claude/scripts/"
 cp -v "$SOURCE_DIR/.claude/scripts/bundle_schema_v1.json" "$TARGET_DIR/.claude/scripts/"
 
 mkdir -p "$TARGET_DIR/rules"
@@ -61,12 +64,16 @@ else
 fi
 
 echo
-echo "Hooks config (.claude/settings.hooks.json) was NOT auto-merged — settings.json"
-echo "is often already customized per project. Merge it in by hand:"
-echo "  $SOURCE_DIR/.claude/settings.hooks.json"
-echo "into your project's .claude/settings.json under the \"hooks\" key."
-echo "It registers two hooks: the write guard and the credentials guard (needed only if you review"
-echo "Frappe sites; the site setup refuses to save a secret without it)."
+# Register the write guard and the credentials guard in .claude/settings.json, keeping the team's
+# other settings. The hooks themselves need Node, so Node is expected here too.
+if command -v node >/dev/null 2>&1; then
+  if node "$SOURCE_DIR/.claude/scripts/octocheck-hooks.cjs" "$TARGET_DIR"; then
+    echo "If Claude Code is already open in this project, exit it and start it again so the hooks load."
+  fi
+else
+  echo "Node.js was not found, so the hooks were not registered. Install Node.js (LTS), then run this"
+  echo "installer again, or add the \"PreToolUse\" entries from .claude/settings.hooks.json to .claude/settings.json."
+fi
 echo
 for f in settings.json settings.local.json; do
   if grep -qs 'node \.claude/hooks/' "$TARGET_DIR/.claude/$f"; then
@@ -78,3 +85,4 @@ for f in settings.json settings.local.json; do
 done
 
 echo "Install complete. Next: open Claude Code in this repo and run /octocheck-init"
+echo "To review a Frappe site's UI scripts: run /octocheck-connect in Claude Code and approve it in your browser."

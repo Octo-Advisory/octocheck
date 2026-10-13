@@ -9,7 +9,8 @@ const { spawnSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
 const INSTALLED = [
-  '.claude/commands/octocheck-init.md', '.claude/commands/octocheck-continue.md',
+  '.claude/commands/octocheck-init.md', '.claude/commands/octocheck-continue.md', '.claude/commands/octocheck-connect.md',
+  '.claude/settings.hooks.json', '.claude/scripts/octocheck-hooks.cjs',
   '.claude/hooks/block-source-write.cjs', '.claude/hooks/block-credentials-read.cjs',
   '.claude/scripts/octocheck-site.cjs', '.claude/scripts/octocheck-fetch.cjs',
   '.claude/scripts/octocheck-schema.cjs', '.claude/scripts/bundle_schema_v1.json',
@@ -60,25 +61,54 @@ module.exports = [
   }],
 
 
-  ['both installers warn when the project still has the old relative hook commands, and stay quiet when it has the new ones', async () => {
+  ['both installers register the hooks: a new settings.json, or merged into the team\'s, old commands replaced', async () => {
     const hasBash = !spawnSync('bash', ['--version'], { encoding: 'utf8' }).error;
     const installers = [(dir) => spawnSync(process.execPath, [path.join(ROOT, 'bin', 'install.js'), dir], { encoding: 'utf8' })]
       .concat(hasBash ? [(dir) => spawnSync('bash', [path.join(ROOT, 'install.sh'), dir], { encoding: 'utf8' })] : []);
+    const wanted = require('../.claude/settings.hooks.json').hooks.PreToolUse.map((g) => g.hooks[0].command);
+    const commands = (dir) => JSON.parse(fs.readFileSync(path.join(dir, '.claude', 'settings.json'), 'utf8')).hooks.PreToolUse.flatMap((g) => g.hooks.map((h) => h.command));
     for (const install of installers) {
-      const oldDir = target();
-      fs.mkdirSync(path.join(oldDir, '.claude'), { recursive: true });
-      fs.writeFileSync(path.join(oldDir, '.claude', 'settings.json'), JSON.stringify({ hooks: { PreToolUse: [{ matcher: 'Write', hooks: [{ type: 'command', command: 'node .claude/hooks/block-source-write.cjs' }] }] } }));
-      const warned = install(oldDir);
-      assert.strictEqual(warned.status, 0, warned.stderr);
-      assert.ok(warned.stdout.includes('WARNING: .claude/settings.json uses the OLD hook commands'), warned.stdout);
-      assert.ok(warned.stdout.includes('$CLAUDE_PROJECT_DIR'), warned.stdout);
-      const newDir = target();
-      fs.mkdirSync(path.join(newDir, '.claude'), { recursive: true });
-      fs.copyFileSync(path.join(ROOT, '.claude', 'settings.hooks.json'), path.join(newDir, '.claude', 'settings.json'));
-      const quiet = install(newDir);
-      assert.ok(!quiet.stdout.includes('WARNING'), quiet.stdout);
-      fs.rmSync(oldDir, { recursive: true, force: true });
-      fs.rmSync(newDir, { recursive: true, force: true });
+      // No settings yet: created with both hooks.
+      const fresh = target();
+      let r = install(fresh);
+      assert.strictEqual(r.status, 0, r.stderr);
+      assert.ok(r.stdout.includes('Hooks: created .claude/settings.json'), r.stdout);
+      assert.deepStrictEqual(commands(fresh), wanted);
+
+      // The team's settings: kept; the old relative command replaced; the missing hook added.
+      const old = target();
+      fs.mkdirSync(path.join(old, '.claude'), { recursive: true });
+      fs.writeFileSync(path.join(old, '.claude', 'settings.json'), JSON.stringify({
+        model: 'opus', permissions: { allow: ['Bash(ls:*)'] },
+        hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'echo team hook' }] },
+          { matcher: 'Write', hooks: [{ type: 'command', command: 'node .claude/hooks/block-source-write.cjs' }] }] },
+      }));
+      r = install(old);
+      assert.strictEqual(r.status, 0, r.stderr);
+      assert.ok(r.stdout.includes('updated the old command for block-source-write.cjs'), r.stdout);
+      assert.ok(r.stdout.includes('added block-credentials-read.cjs'), r.stdout);
+      assert.ok(!r.stdout.includes('WARNING: .claude/settings.json'), r.stdout);
+      const merged = JSON.parse(fs.readFileSync(path.join(old, '.claude', 'settings.json'), 'utf8'));
+      assert.strictEqual(merged.model, 'opus');
+      assert.deepStrictEqual(merged.permissions, { allow: ['Bash(ls:*)'] });
+      assert.deepStrictEqual(commands(old), ['echo team hook', ...wanted]);
+
+      // Already done: nothing changes on a second run.
+      const before = fs.readFileSync(path.join(old, '.claude', 'settings.json'), 'utf8');
+      r = install(old);
+      assert.ok(r.stdout.includes('already registers both OctoCheck hooks'), r.stdout);
+      assert.strictEqual(fs.readFileSync(path.join(old, '.claude', 'settings.json'), 'utf8'), before);
+
+      // Not valid JSON: left alone, with what to do. settings.local.json is never edited, only warned about.
+      const broken = target();
+      fs.mkdirSync(path.join(broken, '.claude'), { recursive: true });
+      fs.writeFileSync(path.join(broken, '.claude', 'settings.json'), '{ not json');
+      fs.writeFileSync(path.join(broken, '.claude', 'settings.local.json'), JSON.stringify({ hooks: { PreToolUse: [{ hooks: [{ command: 'node .claude/hooks/block-source-write.cjs' }] }] } }));
+      r = install(broken);
+      assert.strictEqual(fs.readFileSync(path.join(broken, '.claude', 'settings.json'), 'utf8'), '{ not json');
+      assert.ok(r.stdout.includes('is not valid JSON, so it was left alone'), r.stdout);
+      assert.ok(r.stdout.includes('WARNING: .claude/settings.local.json uses the OLD hook commands'), r.stdout);
+      for (const d of [fresh, old, broken]) fs.rmSync(d, { recursive: true, force: true });
     }
   }],
 

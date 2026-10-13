@@ -269,21 +269,9 @@ footer.foot { padding: 50px 0 60px; text-align: center; color: var(--soft); font
         </div>
       </div>
       <div class="card" style="margin-top:18px">
-        <h3>Turn on the safety hook</h3>
-        <p>This is what guarantees OctoCheck cannot edit your code. Add the block below to your project's <code>.claude/settings.json</code>. If the file already has a <code>"hooks"</code> section, add the entry inside it rather than replacing the file.</p>
-        <div class="copyrow"><pre class="code" id="cHook">{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
-        "hooks": [
-          { "type": "command", "command": "node .claude/hooks/block-source-write.cjs" }
-        ]
-      }
-    ]
-  }
-}</pre><button class="btn small" type="button" data-copy="cHook">Copy</button></div>
-        <div class="note"><p>Without the hook, OctoCheck is still told not to edit your code, but nothing stops a mistake. With it, any write outside the <code>octocheck/</code> folder is blocked.</p></div>
+        <h3>The safety hooks are turned on for you</h3>
+        <p>The installer adds two hooks to your project's <code>.claude/settings.json</code>, keeping anything else already in it. The write guard blocks any edit outside the <code>octocheck/</code> folder, so OctoCheck cannot change your code even by mistake. The credentials guard keeps Claude away from saved site connections.</p>
+        <div class="note"><p>If Claude Code was already open in the project when you installed, exit it and start it again so the hooks load. On Windows, run the install command from PowerShell (Node.js is needed); plain <code>bash</code> in PowerShell starts WSL, not Git Bash.</p></div>
       </div>
     </div>
   </section>
@@ -390,6 +378,8 @@ Continue with Task 4? (yes/no)</pre></div>
             <tr><td><code>/octocheck-init</code></td><td>Builds the plan and waits for your approval.</td></tr>
             <tr><td><code>/octocheck-init main</code></td><td>Plans a review of only the files that differ from the <code>main</code> branch. Fastest way to review a feature branch.</td></tr>
             <tr><td><code>/octocheck-continue</code></td><td>Runs one task, then asks before the next.</td></tr>
+            <tr><td><code>/octocheck-connect https://erp.example.com</code></td><td>Connects a Frappe site (connector 0.1.1 or later): your browser opens, you click Approve, done. No API key to copy.</td></tr>
+            <tr><td><code>/octocheck-init --site my-site --module DPR</code></td><td>Plans a review of one Frappe module's Server and Client Scripts. Scripts outside it stay queued for a later run. Add <code>--only server</code> or <code>--only client</code> to narrow it further.</td></tr>
             <tr><td><code>/octocheck-continue --auto</code></td><td>Runs the remaining tasks without stopping after each one. It applies to that run only, and it still stops on a high-severity flag, a blocked action, or a change that affects too many files.</td></tr>
           </tbody>
         </table></div>

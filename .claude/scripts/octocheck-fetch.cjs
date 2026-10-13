@@ -35,6 +35,8 @@ const BUNDLE_TIMEOUT_MS = 90000;
 const RATE_LIMIT_RETRIES = 2;
 const LINK_PRIORITY = { calls_api: 0, saves_doc: 0, same_field: 1, same_event: 2 };
 const SHOWN_NAMES = 20;
+/** First connector version that can report each script's modules (get_manifest with_modules=1). */
+const MODULES_SINCE = '0.1.1';
 
 // --- small helpers ---------------------------------------------------------
 
@@ -66,6 +68,20 @@ function contextSlug(doctype) {
 
 function deskUrl(origin, doctype, name) {
   return `${origin}/app/${doctype === 'Server Script' ? 'server-script' : 'client-script'}/${encodeURIComponent(name)}`;
+}
+
+/** True when connector version `version` is `min` or later ("0.1.1" style; anything unreadable is false). */
+function versionAtLeast(version, min) {
+  const parse = (v) => String(v || '').split('.').map((x) => parseInt(x, 10));
+  const a = parse(version);
+  const b = parse(min);
+  if (a.some((x) => !Number.isFinite(x))) return false;
+  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+    const x = a[i] || 0;
+    const y = b[i] || 0;
+    if (x !== y) return x > y;
+  }
+  return true;
 }
 
 function stateDirFor(cwd, siteName) {
@@ -181,7 +197,7 @@ function classify(scripts, entries, broken, settings, now, rulesId = null) {
   const removed = [];
   for (const [slug, e] of entries) {
     if (e.del === true || present.has(slug)) continue;
-    removed.push({ slug, doctype: e.doctype, name: e.name, last_reviewed: e.rev || null });
+    removed.push({ slug, doctype: e.doctype, name: e.name, last_reviewed: e.rev || null, m: Array.isArray(e.m) ? e.m : null });
   }
   for (const slug of broken) {
     if (!present.has(slug)) warnings.push(`An unreadable review entry (${slug}.json) belongs to no script on the site and was ignored.`);
@@ -334,7 +350,10 @@ async function runFetch(flags, ctx) {
     }
     const pageSize = Math.min(Math.max(Number(info.page_size) || DEFAULT_PAGE_SIZE, 1), 100);
 
-    const manifest = await call('get_manifest', {});
+    // Connector 0.1.1 and later can say which module each script belongs to (for --module).
+    // It is asked only of connectors that know the option; older ones would reject it.
+    const withModules = versionAtLeast(info.connector_version, MODULES_SINCE);
+    const manifest = await call('get_manifest', withModules ? { with_modules: 1 } : {});
     checkSchema(manifest, 'manifest', 'get_manifest');
     const current = new Map(manifest.scripts.map((s) => [keyOf(s.doctype, s.name), s]));
 
@@ -430,6 +449,7 @@ async function runFetch(flags, ctx) {
         return [key, {
           doctype: s.doctype, name: s.name, hash: s.hash, enabled: s.enabled, script_type: s.script_type,
           reference_doctype: s.reference_doctype, doctype_event: s.doctype_event, apply_to: s.apply_to, modified: s.modified, links,
+          ...(Array.isArray(s.modules) ? { modules: s.modules, module_source: s.module_source || null } : {}),
         }];
       })),
     };
@@ -438,6 +458,7 @@ async function runFetch(flags, ctx) {
       plan_version: 1, site: siteName, profile, url: origin, fetched_at: now.toISOString(), rules_id: rulesId,
       connector: { version: info.connector_version, frappe_version: info.frappe_version, user: info.user, access_mode: info.access_mode },
       settings: { review_expiry_days: settings.review_expiry_days, blast_radius_limit: settings.blast_radius_limit, page_size: pageSize },
+      modules: { available: withModules && Array.isArray(manifest.module_defs), defs: Array.isArray(manifest.module_defs) ? manifest.module_defs : [] },
       counts, review, impacted: impactedOut,
       impacted_over_limit: neighbours.over.map(brief), impacted_disabled: neighbours.disabled.map(brief),
       unchanged: [...items.values()].filter((i) => i.status === 'unchanged').map((i) => ({ slug: i.slug, doctype: i.doctype, name: i.name })),
@@ -468,5 +489,5 @@ async function runFetch(flags, ctx) {
 }
 
 module.exports = {
-  runFetch, classify, pickNeighbours, makeBatches, slugOf, contextSlug, readLimit, readSettings, readEntries, clean, keyOf, deskUrl, stateDirFor,
+  runFetch, classify, pickNeighbours, versionAtLeast, MODULES_SINCE, makeBatches, slugOf, contextSlug, readLimit, readSettings, readEntries, clean, keyOf, deskUrl, stateDirFor,
 };
